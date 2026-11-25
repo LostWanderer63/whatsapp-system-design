@@ -17,12 +17,10 @@ export function startOfDay(t) {
   return d.getTime();
 }
 
-// Whole calendar days between t and now (rounding absorbs DST shifts).
 function daysAgo(t, now) {
   return Math.round((startOfDay(now) - startOfDay(t)) / DAY);
 }
 
-/** Label for the sticky separator above each day of messages. */
 export function dayLabel(t, now = Date.now()) {
   const n = daysAgo(t, now);
   if (n === 0) return "Today";
@@ -31,7 +29,6 @@ export function dayLabel(t, now = Date.now()) {
   return new Date(t).getFullYear() === new Date(now).getFullYear() ? dateFmt.format(t) : dateYearFmt.format(t);
 }
 
-/** Compact stamp for the chat list: time today, then weekday, then date. */
 export function listStamp(t, now = Date.now()) {
   const n = daysAgo(t, now);
   if (n === 0) return clock(t);

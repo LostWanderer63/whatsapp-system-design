@@ -1,4 +1,3 @@
-// Same rules as the server (server/validation.js), so people see problems before submitting.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const MIN_PASSWORD = 8;
 
@@ -47,7 +46,6 @@ export function validateLogin({ identifier, password }) {
   return errors;
 }
 
-/** 0 to 3: how hard the password would be to guess. Only a hint; the rule is the minimum length. */
 export function passwordStrength(pw) {
   if (pw.length < MIN_PASSWORD) return 0;
   let score = 1;

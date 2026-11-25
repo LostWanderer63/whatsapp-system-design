@@ -3,11 +3,10 @@ import { ArrowDown, Avatar, Ticks } from "./bits.jsx";
 import { ME, PEOPLE, firstName } from "./data.js";
 import { clock, dayLabel, fullStamp, startOfDay } from "./time.js";
 
-const GROUP_GAP = 5 * 60_000; // messages closer than this from one sender form one group
-const NEAR_BOTTOM = 96; // px: within this, we treat you as "following" the chat
+const GROUP_GAP = 5 * 60_000;
+const NEAR_BOTTOM = 96;
 const JUMBO = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|‍|️|\s)+$/u;
 
-// Where you left each chat, so switching away and back keeps your place.
 const savedScroll = new Map();
 
 const smooth = () => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
@@ -35,15 +34,15 @@ function groupByDay(messages) {
 export default function MessageList({ convo, dividerId, onRetry }) {
   const scroller = useRef(null);
   const divider = useRef(null);
-  const following = useRef(true); // are we pinned to the newest message?
-  const autoScrolling = useRef(false); // a smooth scroll we started is still running
+  const following = useRef(true);
+  const autoScrolling = useRef(false);
   const lastTop = useRef(0);
   const seenCount = useRef(convo.messages.length);
   const initialIds = useRef(null);
   initialIds.current ??= new Set(convo.messages.map((m) => m.id));
 
   const [awayFromBottom, setAwayFromBottom] = useState(false);
-  const [fresh, setFresh] = useState(0); // messages that arrived while you were scrolled up
+  const [fresh, setFresh] = useState(0);
 
   const isGroup = convo.kind === "group";
   const days = useMemo(() => groupByDay(convo.messages), [convo.messages]);
@@ -58,13 +57,12 @@ export default function MessageList({ convo, dividerId, onRetry }) {
     el.scrollTo({ top: el.scrollHeight, behavior: animate ? smooth() : "auto" });
   }, []);
 
-  // Opening a chat: unread divider first, else where you left off, else the bottom.
   useLayoutEffect(() => {
     const el = scroller.current;
     const saved = savedScroll.get(convo.id);
     if (divider.current) {
       const offset = divider.current.getBoundingClientRect().top - el.getBoundingClientRect().top;
-      el.scrollTop += offset - 56; // leave room for the sticky day label
+      el.scrollTop += offset - 56;
     } else if (saved && !saved.following) {
       el.scrollTop = saved.top;
     } else {
@@ -75,10 +73,8 @@ export default function MessageList({ convo, dividerId, onRetry }) {
     following.current = near;
     setAwayFromBottom(!near);
     return () => savedScroll.set(convo.id, { top: lastTop.current, following: following.current });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // New messages: yours always scroll into view; others' only if you're at the bottom.
   useLayoutEffect(() => {
     const count = convo.messages.length;
     const added = count - seenCount.current;
@@ -88,12 +84,10 @@ export default function MessageList({ convo, dividerId, onRetry }) {
     else setFresh((n) => n + added);
   }, [convo.messages, scrollToEnd]);
 
-  // Typing indicator appearing shouldn't hide under the composer.
   useLayoutEffect(() => {
     if (convo.typing && following.current) scrollToEnd(true);
   }, [convo.typing, scrollToEnd]);
 
-  // When the viewport shrinks (composer grows, keyboard opens, window resizes), stay pinned.
   useEffect(() => {
     const el = scroller.current;
     const ro = new ResizeObserver(() => {
@@ -117,7 +111,6 @@ export default function MessageList({ convo, dividerId, onRetry }) {
     if (near) setFresh(0);
   }
 
-  // Any manual input cancels "this is our own smooth scroll".
   const userTookOver = () => {
     autoScrolling.current = false;
   };

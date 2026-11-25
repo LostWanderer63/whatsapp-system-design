@@ -10,7 +10,6 @@ export default function LoginPage({ handoff, onSignup, onLoggedIn }) {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  // Bumped when errors appear, so focus moves after React has rendered them.
   const [focusTick, setFocusTick] = useState(0);
 
   useEffect(() => {

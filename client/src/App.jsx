@@ -7,7 +7,6 @@ import { clearSession, getToken, getUser } from "./api.js";
 
 const AUTH_ROUTES = ["signup", "login"];
 
-// #/signup, #/login, #/chat, #/chat/<id>
 function readHash() {
   const [route, id] = window.location.hash.replace(/^#\/?/, "").split("/");
   if (route === "chat") return { route, id: id ? decodeURIComponent(id) : null };
@@ -29,7 +28,6 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  // Chats need a session.
   useEffect(() => {
     if (route === "chat" && !signedIn) window.location.replace("#/login");
   }, [route, signedIn]);

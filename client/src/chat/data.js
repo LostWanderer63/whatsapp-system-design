@@ -1,8 +1,3 @@
-// Demo conversations. Each one is backed by a real conversation on the server
-// (found or created by its key, e.g. "trek"), and messages you send there are
-// saved and loaded back. The scripted lines and replies below are not stored.
-// Times are written as "hours ago" so order and day labels stay correct.
-
 export const ME = "me";
 
 export const PEOPLE = {
@@ -13,7 +8,6 @@ export const PEOPLE = {
   zoya: { name: "Zoya Khan", tone: "sky" },
 };
 
-// Senders the server tells us about who aren't in the demo cast above.
 export function rememberPerson(userId, name) {
   const key = `u${userId}`;
   PEOPLE[key] ??= { name: name || "Someone", tone: "sky" };
@@ -36,7 +30,6 @@ export const nextId = () => `m${Date.now().toString(36)}${(seq++).toString(36)}`
 
 const HOUR = 3_600_000;
 
-// [from, text, hoursAgo, status?]
 const SCRIPTS = {
   trek: [
     ["riya", "Okay, planning thread for the Kalsubai trek 🏔️", 50.4],
@@ -102,7 +95,6 @@ export const REPLIES = {
   arjun: ["Sounds good", "On it", "👌"],
 };
 
-// Messages that arrive on their own a little after the page opens.
 export const INCOMING = [
   { after: 20_000, convo: "flat", from: "arjun", text: "Whoever finished the milk: I see you 🥛" },
   { after: 45_000, convo: "trek", from: "kabir", text: "Also, who's bringing the first aid kit?" },

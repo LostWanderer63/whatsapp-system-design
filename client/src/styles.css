@@ -61,8 +61,6 @@ a:hover {
   outline-offset: 2px;
 }
 
-/* ---------- layout ---------- */
-
 .auth {
   display: grid;
   grid-template-columns: minmax(380px, 46%) 1fr;
@@ -113,8 +111,6 @@ a:hover {
   width: 100%;
   max-width: 420px;
 }
-
-/* ---------- chat panel (the one bold element) ---------- */
 
 .chat {
   width: 100%;
@@ -237,8 +233,6 @@ a:hover {
   }
 }
 
-/* ---------- form ---------- */
-
 .auth-form h1 {
   margin: 0 0 6px;
   font-family: var(--font-display);
@@ -314,8 +308,6 @@ a:hover {
   font-weight: 700;
 }
 
-/* password */
-
 .password {
   position: relative;
 }
@@ -371,8 +363,6 @@ a:hover {
   background: #3fbf7f;
 }
 
-/* buttons */
-
 .btn-primary,
 .btn-secondary {
   width: 100%;
@@ -415,8 +405,6 @@ a:hover {
   border-color: var(--night);
 }
 
-/* notices */
-
 .notice {
   margin-bottom: 20px;
   padding: 12px 14px;
@@ -433,8 +421,6 @@ a:hover {
   color: var(--success);
   background: var(--success-bg);
 }
-
-/* ---------- responsive ---------- */
 
 @media (max-width: 880px) {
   .auth {
@@ -465,7 +451,6 @@ a:hover {
     margin-bottom: 12px;
   }
 
-  /* Keep the panel short on phones: last message and the join line only. */
   .bubble:nth-child(-n + 2) {
     display: none;
   }

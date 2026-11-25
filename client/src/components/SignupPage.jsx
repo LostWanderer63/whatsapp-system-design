@@ -12,7 +12,6 @@ export default function SignupPage({ onNameChange, onCreated, onLogin }) {
   const [formError, setFormError] = useState("");
   const [exists, setExists] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  // Bumped when errors appear, so focus moves after React has rendered them.
   const [focusTick, setFocusTick] = useState(0);
 
   useEffect(() => {

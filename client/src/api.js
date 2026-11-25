@@ -14,7 +14,6 @@ export function setToken(token) {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
   } catch {
-    /* storage blocked: the session just won't survive a reload */
   }
 }
 
@@ -31,7 +30,6 @@ export function saveSession(token, user) {
   try {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   } catch {
-    /* see setToken */
   }
 }
 
@@ -40,7 +38,6 @@ export function clearSession() {
   try {
     localStorage.removeItem(USER_KEY);
   } catch {
-    /* see setToken */
   }
 }
 

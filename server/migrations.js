@@ -1,7 +1,5 @@
 const { sequelize } = require("./db");
 
-// Schema changes that sequelize.sync() can't make on an existing table.
-
 async function columnType(table, column) {
   const [rows] = await sequelize.query(
     "SELECT DATA_TYPE AS type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
@@ -18,11 +16,6 @@ async function hasIndex(table, index) {
   return rows.length > 0;
 }
 
-/**
- * The first version of `messages` stored conversation_id as free text ("trek").
- * Turn each (sender, text id) pair into a real conversation the sender owns,
- * then point messages at it with a foreign key. Safe to re-run if interrupted.
- */
 async function linkMessagesToConversations() {
   if ((await columnType("messages", "conversation_id")) !== "varchar") return;
   console.log("Migrating messages.conversation_id to the conversations table…");
@@ -45,7 +38,6 @@ async function linkMessagesToConversations() {
     );
   });
 
-  // MySQL commits DDL immediately, so each step below checks whether it already ran.
   if (!(await columnType("messages", "conversation_ref"))) {
     await sequelize.query("ALTER TABLE messages ADD COLUMN conversation_ref BIGINT UNSIGNED NULL");
   }

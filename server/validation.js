@@ -7,18 +7,13 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-/**
- * Turn what people type ("98765 43210", "+91-98765-43210", "(987) 654-3210")
- * into one stored form: "+" followed by 10 to 15 digits.
- * A bare 10-digit number gets DEFAULT_COUNTRY_CODE. Returns null if it can't be a phone number.
- */
 function normalizePhone(value) {
   const raw = String(value || "").trim();
   if (!/^[+\d\s().-]+$/.test(raw)) return null;
   const hasPlus = raw.startsWith("+");
   let digits = raw.replace(/\D/g, "");
   if (!hasPlus) {
-    if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1); // trunk prefix 0
+    if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
     if (digits.length === 10) digits = config.defaultCountryCode + digits;
   }
   return /^\d{10,15}$/.test(digits) ? `+${digits}` : null;
@@ -44,7 +39,6 @@ function validateSignup(body) {
   return { errors, values: { name, email, phone, password } };
 }
 
-/** Login accepts an email or a phone number in one field. */
 function parseIdentifier(value) {
   const raw = String(value || "").trim();
   if (raw.includes("@")) {
@@ -58,7 +52,6 @@ function parseIdentifier(value) {
 const MAX_MESSAGE = 4000;
 const KEY_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** A BIGINT row id from a URL or body ("42" or 42), as a string; null if it isn't one. */
 function parseId(value) {
   const raw = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
   return /^[1-9]\d{0,18}$/.test(raw) ? raw : null;

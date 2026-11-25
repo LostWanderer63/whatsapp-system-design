@@ -2,10 +2,6 @@ const { DataTypes } = require("sequelize");
 const { sequelize } = require("../db");
 const User = require("./User");
 
-// A chat: a direct chat between two people, or a group.
-//   created_by  the user who started it
-//   client_key  optional key the app uses to find a chat it created, unique per creator
-//               (the built-in demo chats use "trek", "flat", ...)
 const Conversation = sequelize.define(
   "Conversation",
   {

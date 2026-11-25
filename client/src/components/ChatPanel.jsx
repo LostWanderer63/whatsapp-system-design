@@ -1,5 +1,3 @@
-// The decorative group conversation on the left. It plays in once on load;
-// the last line follows what the person types in the Name field.
 const MESSAGES = [
   { from: "Riya", tone: "violet", text: "Trek is on for Saturday. Who's in?" },
   { from: "Kabir", tone: "mint", text: "Me! I'll bring the big thermos" },

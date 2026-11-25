@@ -3,11 +3,6 @@ const { sequelize } = require("../db");
 const User = require("./User");
 const Conversation = require("./Conversation");
 
-// One row per chat message.
-//   sender_id        who sent it (the logged-in user, taken from the JWT, never the request body)
-//   conversation_id  which chat it belongs to (FK; the sender must be a member)
-//   body             the message text
-//   client_id        id the browser generates per message, so a retried send isn't stored twice
 const Message = sequelize.define(
   "Message",
   {
@@ -19,14 +14,11 @@ const Message = sequelize.define(
   {
     tableName: "messages",
     underscored: true,
-    updatedAt: false, // messages aren't edited yet; created_at is enough
-    // utf8mb4 so emoji are stored correctly
+    updatedAt: false,
     charset: "utf8mb4",
     collate: "utf8mb4_unicode_ci",
     indexes: [
-      // A chat's history, newest first, paged by id: WHERE conversation_id = ? AND id < ? ORDER BY id DESC
       { name: "messages_conversation_id", fields: ["conversation_id", "id"] },
-      // Same sender + same client id = same message (MySQL allows many NULLs here)
       { name: "messages_sender_client", unique: true, fields: ["sender_id", "client_id"] },
     ],
   }
@@ -45,7 +37,7 @@ Message.belongsTo(Conversation, {
 
 Message.prototype.toPublic = function toPublic() {
   return {
-    id: String(this.id), // BIGINT can exceed JS number precision
+    id: String(this.id),
     conversationId: String(this.conversationId),
     senderId: this.senderId,
     senderName: this.sender?.name,

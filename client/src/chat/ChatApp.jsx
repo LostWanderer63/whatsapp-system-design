@@ -7,10 +7,8 @@ import "./chat.css";
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
-// Sent with each message so a retry is recognised by the server instead of stored twice.
 const newClientId = () => (crypto.randomUUID ? crypto.randomUUID() : nextId());
 
-// Fold messages loaded from the server into a chat's timeline, in time order.
 function mergeHistory(convo, stored, userId) {
   const known = new Set(convo.messages.flatMap((m) => [m.id, m.serverId]).filter(Boolean));
   const fresh = stored
@@ -30,17 +28,12 @@ function mergeHistory(convo, stored, userId) {
 export default function ChatApp({ user, activeId, onLogout }) {
   const [convos, setConvos] = useState(() => seedConversations(Date.now()));
   const [drafts, setDrafts] = useState({});
-  // First unread message of each chat, captured when it is opened, so the
-  // "unread" divider stays put while you read.
   const [dividers, setDividers] = useState({});
   const [opened, setOpened] = useState(null);
-  // Loading saved messages: "loading" | "ready" | an error message.
   const [sync, setSync] = useState("loading");
 
   const active = convos.find((c) => c.id === activeId) || null;
 
-  // Opening a chat marks it read. Done during render (not in an effect) so the
-  // thread mounts already knowing where the divider is and can scroll to it.
   if ((active?.id ?? null) !== opened) {
     setOpened(active?.id ?? null);
     if (active) {
@@ -75,7 +68,6 @@ export default function ChatApp({ user, activeId, onLogout }) {
 
   const update = useCallback((id, fn) => setConvos((cs) => cs.map((c) => (c.id === id ? fn(c) : c))), []);
 
-  // Each chat's server id, looked up (or created) once by its key.
   const serverIds = useRef(new Map());
   const ensureConversation = useCallback((convo) => {
     let id = serverIds.current.get(convo.id);
@@ -85,7 +77,7 @@ export default function ChatApp({ user, activeId, onLogout }) {
         auth: true,
         body: { clientKey: convo.id, title: convo.title, kind: convo.kind },
       }).then((r) => r.conversation.id);
-      id.catch(() => serverIds.current.delete(convo.id)); // try again next time
+      id.catch(() => serverIds.current.delete(convo.id));
       serverIds.current.set(convo.id, id);
     }
     return id;
@@ -96,15 +88,29 @@ export default function ChatApp({ user, activeId, onLogout }) {
     const run = ++loadRun.current;
     setSync("loading");
     try {
-      const histories = await Promise.all(
-        convosRef.current.map(async (c) => {
-          const id = await ensureConversation(c);
-          const { messages } = await request(`/conversations/${id}/messages?limit=100`, { auth: true });
-          return [c.id, messages];
-        })
-      );
+      const { conversations } = await request("/conversations", { auth: true });
+      conversations.forEach((c) => {
+        if (c.clientKey && c.createdBy === user.id && !serverIds.current.has(c.clientKey)) {
+          serverIds.current.set(c.clientKey, Promise.resolve(c.id));
+        }
+      });
+      const keyByServerId = new Map(await Promise.all(convosRef.current.map(async (c) => [await ensureConversation(c), c.id])));
+
+      const all = [];
+      let after = null;
+      for (;;) {
+        const page = await request(`/messages${after ? `?after=${after}` : ""}`, { auth: true });
+        all.push(...page.messages);
+        if (!page.hasMore || !page.messages.length) break;
+        after = page.messages.at(-1).id;
+      }
       if (run !== loadRun.current) return;
-      const byKey = Object.fromEntries(histories);
+
+      const byKey = {};
+      all.forEach((m) => {
+        const key = keyByServerId.get(m.conversationId);
+        if (key) (byKey[key] ??= []).push(m);
+      });
       setConvos((cs) => cs.map((c) => (byKey[c.id] ? mergeHistory(c, byKey[c.id], user.id) : c)));
       setSync("ready");
     } catch (err) {
@@ -117,9 +123,8 @@ export default function ChatApp({ user, activeId, onLogout }) {
   useEffect(() => {
     loadHistory();
     return () => {
-      loadRun.current++; // ignore a load that finishes after unmount
+      loadRun.current++;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const receive = useCallback(
@@ -145,7 +150,6 @@ export default function ChatApp({ user, activeId, onLogout }) {
   );
 
   function send(convoId, text) {
-    // Show it right away as "sending"; the clientId doubles as its local id.
     const msg = { id: newClientId(), from: ME, text, at: Date.now(), status: "sending" };
     update(convoId, (c) => ({ ...c, messages: [...c.messages, msg] }));
     setDrafts((d) => ({ ...d, [convoId]: "" }));
@@ -177,7 +181,6 @@ export default function ChatApp({ user, activeId, onLogout }) {
     simulateReply(convoId);
   }
 
-  // Demo only: someone answers with a typing indicator, then a reply. One per burst.
   function simulateReply(convoId) {
     if (replying.current.has(convoId)) return;
     replying.current.add(convoId);

@@ -1,15 +1,13 @@
 import { useLayoutEffect, useRef } from "react";
 import { SendIcon } from "./bits.jsx";
 
-const MAX_HEIGHT = 168; // about 7 lines, then the field scrolls
+const MAX_HEIGHT = 168;
 
-// Focus the field on open only with a mouse/trackpad; on phones it would pop the keyboard.
 const finePointer = () => window.matchMedia("(pointer: fine)").matches;
 
 export default function Composer({ value, onChange, onSend, placeholder }) {
   const field = useRef(null);
 
-  // Grow with the text.
   useLayoutEffect(() => {
     const el = field.current;
     el.style.height = "auto";
@@ -26,7 +24,6 @@ export default function Composer({ value, onChange, onSend, placeholder }) {
   }
 
   function onKeyDown(e) {
-    // Enter sends, Shift+Enter adds a line. Leave Enter alone while an IME is composing.
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       submit();

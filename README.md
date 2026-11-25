@@ -33,6 +33,7 @@ npm start       # builds the React app and serves everything on http://localhost
 | GET | `/api/conversations` | — lists the chats you're a member of |
 | POST | `/api/conversations` | `{ title, kind?, clientKey? }` — creates a chat you own; an existing `clientKey` returns that chat |
 | GET | `/api/conversations/:id/messages?before=&limit=` | — members only; oldest-first page, `hasMore` for older pages |
+| GET | `/api/messages?after=` | — every message in your chats (`text`, `senderId`, `conversationId`, …), oldest first; `after=<id>` returns only newer ones; pages of 1000 with `hasMore` |
 | POST | `/api/messages` | `{ conversationId, text, clientId? }` — members only |
 
 All but signup/login need `Authorization: Bearer <token>`. Chats you aren't a member of return 404, so their existence isn't revealed.

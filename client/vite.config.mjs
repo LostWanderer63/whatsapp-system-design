@@ -10,7 +10,6 @@ export default defineConfig({
   build: { outDir: "../dist", emptyOutDir: true },
   server: {
     port: 5173,
-    // API calls go to the Express server during development.
     proxy: { "/api": "http://localhost:4000" },
   },
 });

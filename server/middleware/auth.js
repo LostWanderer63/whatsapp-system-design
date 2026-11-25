@@ -1,7 +1,6 @@
 const jwt = require("jsonwebtoken");
 const config = require("../config");
 
-/** Reads "Authorization: Bearer <jwt>" and sets req.userId, or replies 401. */
 function requireAuth(req, res, next) {
   const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "");
   if (!match) return res.status(401).json({ message: "Please log in first." });

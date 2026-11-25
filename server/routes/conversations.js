@@ -13,7 +13,6 @@ router.use(requireAuth);
 
 const NOT_FOUND = { message: "Chat not found." };
 
-// GET /api/conversations  -> the chats you're a member of
 router.get("/", async (req, res, next) => {
   try {
     const conversations = await Conversation.findAll({
@@ -26,9 +25,6 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// POST /api/conversations  { title, kind?, clientKey? }
-// Creates a chat with you as its owner. With a clientKey you've used before,
-// returns that chat instead (200), so the app can call this on every load.
 router.post("/", async (req, res, next) => {
   const { errors, values } = validateConversation(req.body || {});
   if (Object.keys(errors).length) return res.status(400).json({ message: "Chat could not be created.", errors });
@@ -47,7 +43,6 @@ router.post("/", async (req, res, next) => {
     });
     return res.status(201).json({ conversation: conversation.toPublic() });
   } catch (err) {
-    // Two requests with the same clientKey raced; the other one won.
     if (err instanceof UniqueConstraintError) {
       const existing = await findExisting();
       if (existing) return res.json({ conversation: existing.toPublic() });
@@ -56,9 +51,6 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-// GET /api/conversations/:id/messages?before=<messageId>&limit=50
-// Oldest-first page of messages. Members only; anyone else gets 404, so the
-// response doesn't reveal whether the chat exists.
 router.get("/:id/messages", async (req, res, next) => {
   const conversationId = parseId(req.params.id);
   if (!conversationId) return res.status(404).json(NOT_FOUND);
@@ -74,7 +66,7 @@ router.get("/:id/messages", async (req, res, next) => {
       where: { conversationId, ...(before ? { id: { [Op.lt]: before } } : {}) },
       include: [{ model: User, as: "sender", attributes: ["id", "name"] }],
       order: [["id", "DESC"]],
-      limit: limit + 1, // one extra tells us whether there's an older page
+      limit: limit + 1,
     });
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit).reverse();

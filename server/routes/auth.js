@@ -13,7 +13,6 @@ function signToken(user) {
   return jwt.sign({ userId: user.id }, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
 }
 
-// POST /api/auth/signup  { name, email, phone, password }
 router.post("/signup", async (req, res, next) => {
   const { errors, values } = validateSignup(req.body || {});
   if (Object.keys(errors).length) {
@@ -47,7 +46,6 @@ router.post("/signup", async (req, res, next) => {
     return res.status(201).json({ message: "Account created.", user: user.toPublic() });
   } catch (err) {
     if (transaction && !transaction.finished) await transaction.rollback();
-    // Two sign-ups racing for the same email/phone.
     if (err instanceof UniqueConstraintError) {
       return res.status(409).json({ message: "User already exists. Please log in." });
     }
@@ -55,7 +53,6 @@ router.post("/signup", async (req, res, next) => {
   }
 });
 
-// POST /api/auth/login  { identifier: email or phone, password }
 router.post("/login", async (req, res, next) => {
   const { identifier, password } = req.body || {};
   const id = parseIdentifier(identifier);
@@ -68,8 +65,6 @@ router.post("/login", async (req, res, next) => {
 
   try {
     const user = await User.findOne({ where: { [id.type]: id.value } });
-    // Same reply for unknown account and wrong password, so this can't be used
-    // to find out which emails or numbers are registered.
     const valid = user && (await bcrypt.compare(password, user.passwordHash));
     if (!valid) {
       return res.status(401).json({ message: "That email/phone and password don't match an account." });

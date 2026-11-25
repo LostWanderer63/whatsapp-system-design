@@ -1,4 +1,3 @@
-// All settings come from environment variables (.env locally).
 require("dotenv").config({ quiet: true });
 
 function required(name) {
@@ -22,6 +21,5 @@ module.exports = {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   },
   bcryptRounds: Number(process.env.BCRYPT_SALT_ROUNDS) || 10,
-  // Used when someone types a 10-digit phone number without a country code.
   defaultCountryCode: (process.env.DEFAULT_COUNTRY_CODE || "91").replace(/\D/g, ""),
 };
