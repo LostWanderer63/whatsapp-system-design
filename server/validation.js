@@ -86,4 +86,4 @@ function validateConversation(body) {
   return { errors, values: { title, kind, clientKey } };
 }
 
-module.exports = { validateSignup, parseIdentifier, normalizePhone, validateMessage, validateConversation, parseId, MAX_MESSAGE };
+module.exports = { validateSignup, parseIdentifier, normalizePhone, normalizeEmail, validateMessage, validateConversation, parseId, MAX_MESSAGE };

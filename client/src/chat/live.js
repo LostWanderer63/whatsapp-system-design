@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || `${window.location.protocol}//${window.location.hostname}:3000`;
+const ACK_TIMEOUT = 8000;
 
 export function connectLive({ getToken, onReady, onMessage, onPresence, onStatus, onUnauthorized }) {
   const socket = io(SOCKET_URL, {
@@ -33,5 +34,23 @@ export function connectLive({ getToken, onReady, onMessage, onPresence, onStatus
   socket.on("new_message", onMessage);
   socket.on("presence", ({ online }) => onPresence(online));
 
-  return () => socket.disconnect();
+  function emit(event, data) {
+    return new Promise((resolve, reject) => {
+      if (!socket.connected) {
+        reject(new Error("You're offline. Reconnecting…"));
+        return;
+      }
+      socket.timeout(ACK_TIMEOUT).emit(event, data, (err, res) => {
+        if (err) reject(new Error("The server didn't respond. Check your connection."));
+        else if (!res?.ok) reject(Object.assign(new Error(res?.error || "Something went wrong."), { fields: res?.errors }));
+        else resolve(res);
+      });
+    });
+  }
+
+  return {
+    emit,
+    isConnected: () => socket.connected,
+    stop: () => socket.disconnect(),
+  };
 }

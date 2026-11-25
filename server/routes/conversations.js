@@ -19,7 +19,20 @@ router.get("/", async (req, res, next) => {
       include: [{ model: ConversationMember, as: "members", where: { userId: req.userId }, attributes: [] }],
       order: [["id", "ASC"]],
     });
-    return res.json({ conversations: conversations.map((c) => c.toPublic()) });
+    const directIds = conversations.filter((c) => c.kind === "direct").map((c) => c.id);
+    const others = directIds.length
+      ? await ConversationMember.findAll({
+          where: { conversationId: directIds, userId: { [Op.ne]: req.userId } },
+          include: [{ model: User, attributes: ["id", "name"] }],
+        })
+      : [];
+    const otherByConversation = new Map(others.map((m) => [String(m.conversationId), m.User && { id: m.User.id, name: m.User.name }]));
+    return res.json({
+      conversations: conversations.map((c) => ({
+        ...c.toPublic(),
+        ...(c.kind === "direct" ? { otherUser: otherByConversation.get(String(c.id)) || null } : {}),
+      })),
+    });
   } catch (err) {
     return next(err);
   }

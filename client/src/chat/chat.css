@@ -165,6 +165,72 @@
   cursor: pointer;
 }
 
+.start-chat {
+  margin: 0 10px 8px;
+}
+
+.start-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--white);
+  text-align: left;
+  background: rgba(255, 224, 122, 0.1);
+  border: 1.5px dashed rgba(255, 224, 122, 0.45);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+
+.start-chat-btn:hover:not(:disabled) {
+  background: rgba(255, 224, 122, 0.16);
+  border-color: var(--butter);
+}
+
+.start-chat-btn:disabled {
+  cursor: progress;
+  opacity: 0.8;
+}
+
+.start-chat-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--butter);
+  color: var(--night);
+}
+
+.start-chat-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.start-chat-text strong {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.start-chat-text small {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.start-chat-error {
+  margin: 6px 4px 0;
+  color: var(--coral);
+  font-size: 0.85rem;
+}
+
 .convo-scroll {
   flex: 1;
   min-height: 0;

@@ -6,6 +6,7 @@ import { lastSeen } from "./time.js";
 
 function subtitle(convo, presence) {
   if (convo.live) return presence;
+  if (convo.personal) return "Personal chat";
   if (convo.typing) return convo.kind === "group" ? `${firstName(PEOPLE[convo.typing].name)} is typing…` : "typing…";
   if (convo.kind === "group") return ["You", ...convo.members.map((id) => firstName(PEOPLE[id].name))].join(", ");
   const theirs = convo.messages.findLast((m) => m.from === convo.members[0]);

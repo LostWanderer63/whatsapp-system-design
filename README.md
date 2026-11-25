@@ -54,10 +54,12 @@ The client connects with `socket.io-client`, passing the JWT in the handshake: `
 
 | Event | Payload | Ack |
 |---|---|---|
-| `join_room` | `{ userId }` opens (or creates) your one-to-one chat with that user; `{ conversationId }` re-joins a chat you're in | `{ ok, conversation: { …, otherUser }, messages }` (last 50) or `{ ok: false, error }` |
+| `join_room` | `{ email }` or `{ userId }` opens (or creates) your one-to-one chat with that user; `{ conversationId }` re-joins a chat you're in | `{ ok, conversation: { …, otherUser }, messages }` (last 50) or `{ ok: false, error }` |
 | `new_message` | `{ conversationId, text, clientId? }` | `{ ok, message }` or `{ ok: false, error }` |
 
 `join_room` puts the socket in the `conversation:<id>` room. `new_message` applies the same checks as `POST /api/messages` (validation, membership, `clientId` retry safety), stores the message, and emits `new_message` to the conversation room and to every member's `user:<id>` room, so the other person gets it even if they haven't opened the chat. There is exactly one personal chat per pair of users, enforced by `conversations.direct_key` (`"<lower id>:<higher id>"`, unique).
+
+In the app, typing a full email into the sidebar search shows **Start a chat**; it emits `join_room({ email })` and opens the chat. Messages are sent with `socket.emit("new_message", …)` (falling back to `POST /api/messages` while the socket is reconnecting) and received through the `new_message` listener. After every (re)connect the client emits `join_room({ conversationId })` for each personal chat, since rooms don't survive a reconnect. A chat someone else starts with you shows up as soon as their first message arrives.
 
 `POST /api/messages` works too and emits the same event, so validation, membership checks and retry-safety stay consistent. Socket.IO handles reconnection; on every `connect` the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline. Set `VITE_SOCKET_URL` to point the frontend at a different Socket.IO server.
 

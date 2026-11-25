@@ -4,7 +4,7 @@ const User = require("../../models/User");
 const Conversation = require("../../models/Conversation");
 const ConversationMember = require("../../models/ConversationMember");
 const Message = require("../../models/Message");
-const { validateMessage, parseId } = require("../../validation");
+const { validateMessage, parseId, normalizeEmail } = require("../../validation");
 const { conversationRoom, publishMessage } = require("./chat");
 
 const HISTORY_SIZE = 50;
@@ -58,14 +58,25 @@ async function recentMessages(conversationId) {
   return rows.reverse().map((m) => m.toPublic());
 }
 
+async function findOther(body) {
+  if (body.email !== undefined) {
+    const email = normalizeEmail(body.email);
+    if (!email.includes("@")) return { error: "Enter an email address." };
+    const user = await User.findOne({ where: { email }, attributes: ["id", "name"] });
+    return user ? { user } : { error: "No Chorus account uses that email." };
+  }
+  const otherId = Number(body.userId);
+  if (!Number.isInteger(otherId) || otherId <= 0) return { error: "userId must be a user id." };
+  const user = await User.findByPk(otherId, { attributes: ["id", "name"] });
+  return user ? { user } : { error: "User not found." };
+}
+
 async function openConversation(meId, body) {
-  if (body.userId !== undefined) {
-    const otherId = Number(body.userId);
-    if (!Number.isInteger(otherId) || otherId <= 0) return { error: "userId must be a user id." };
-    if (otherId === meId) return { error: "You can't start a personal chat with yourself." };
-    const other = await User.findByPk(otherId, { attributes: ["id", "name"] });
-    if (!other) return { error: "User not found." };
-    return { conversation: await findOrCreateDirect(meId, otherId), otherUser: { id: other.id, name: other.name } };
+  if (body.email !== undefined || body.userId !== undefined) {
+    const { error, user } = await findOther(body);
+    if (error) return { error };
+    if (user.id === meId) return { error: "You can't start a personal chat with yourself." };
+    return { conversation: await findOrCreateDirect(meId, user.id), otherUser: { id: user.id, name: user.name } };
   }
 
   const conversationId = parseId(body.conversationId);

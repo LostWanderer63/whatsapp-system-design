@@ -12,13 +12,35 @@ function preview(c, draft) {
   return { kind: "plain", who, text: last.text.replace(/\s+/g, " ") };
 }
 
-export default function ConversationList({ convos, activeId, drafts, liveStatus, user, onLogout, syncError, onRetrySync }) {
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+export default function ConversationList({ convos, activeId, drafts, liveStatus, user, onLogout, syncError, onRetrySync, onStartChat }) {
   const [query, setQuery] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState("");
   const q = query.trim().toLowerCase();
+  const isEmail = EMAIL_RE.test(q);
+
+  async function startChat() {
+    setStarting(true);
+    setStartError("");
+    try {
+      await onStartChat(q);
+      setQuery("");
+    } catch (err) {
+      setStartError(err.message);
+    } finally {
+      setStarting(false);
+    }
+  }
 
   const sorted = [...convos]
     .filter((c) => !q || c.title.toLowerCase().includes(q) || c.messages.some((m) => m.text.toLowerCase().includes(q)))
-    .sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live)) || (b.messages.at(-1)?.at ?? 0) - (a.messages.at(-1)?.at ?? 0));
+    .sort(
+      (a, b) =>
+        Number(Boolean(b.live)) - Number(Boolean(a.live)) ||
+        (b.messages.at(-1)?.at ?? b.openedAt ?? 0) - (a.messages.at(-1)?.at ?? a.openedAt ?? 0)
+    );
 
   return (
     <aside className="sidebar">
@@ -44,9 +66,44 @@ export default function ConversationList({ convos, activeId, drafts, liveStatus,
           <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" />
           <path d="m16 16 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
-        <label className="sr-only" htmlFor="chat-search">Search chats</label>
-        <input id="chat-search" type="search" placeholder="Search chats and messages" value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" />
+        <label className="sr-only" htmlFor="chat-search">Search chats, or enter an email to start one</label>
+        <input
+          id="chat-search"
+          type="search"
+          placeholder="Search, or enter an email to chat"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setStartError("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && isEmail && !starting) startChat();
+          }}
+          autoComplete="off"
+          spellCheck={false}
+        />
       </div>
+
+      {isEmail && (
+        <div className="start-chat">
+          <button type="button" className="start-chat-btn" onClick={startChat} disabled={starting}>
+            <span className="start-chat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+              </svg>
+            </span>
+            <span className="start-chat-text">
+              <strong>{starting ? "Opening chat…" : "Start a chat"}</strong>
+              <small>{q}</small>
+            </span>
+          </button>
+          {startError && (
+            <p className="start-chat-error" role="alert">
+              {startError}
+            </p>
+          )}
+        </div>
+      )}
 
       {syncError && (
         <div className="side-notice" role="alert">
@@ -59,7 +116,7 @@ export default function ConversationList({ convos, activeId, drafts, liveStatus,
 
       <nav className="convo-scroll" aria-label="Chats">
         {sorted.length === 0 ? (
-          <p className="convo-none">No chats match “{query.trim()}”.</p>
+          !isEmail && <p className="convo-none">No chats match “{query.trim()}”.</p>
         ) : (
           <ul className="convo-list">
             {sorted.map((c) => {

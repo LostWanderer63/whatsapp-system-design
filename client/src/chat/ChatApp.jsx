@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ConversationList from "./ConversationList.jsx";
 import ConversationView from "./ConversationView.jsx";
-import { INCOMING, ME, REPLIES, firstName, nextId, rememberPerson, seedConversations } from "./data.js";
+import { INCOMING, ME, PEOPLE, REPLIES, firstName, nextId, rememberPerson, seedConversations } from "./data.js";
 import { getToken, request } from "../api.js";
 import { connectLive } from "./live.js";
 import "./chat.css";
@@ -24,6 +24,23 @@ function mergeHistory(convo, stored, userId) {
     }));
   if (!fresh.length) return convo;
   return { ...convo, messages: [...convo.messages, ...fresh].sort((a, b) => a.at - b.at) };
+}
+
+function personalConvo(conversation, otherUser) {
+  const from = rememberPerson(otherUser.id, otherUser.name);
+  return {
+    id: `dm${conversation.id}`,
+    kind: "direct",
+    personal: true,
+    serverId: conversation.id,
+    title: otherUser.name,
+    tone: PEOPLE[from].tone,
+    members: [from],
+    messages: [],
+    unread: 0,
+    typing: null,
+    openedAt: Date.now(),
+  };
 }
 
 export default function ChatApp({ user, activeId, onLogout }) {
@@ -74,6 +91,16 @@ export default function ChatApp({ user, activeId, onLogout }) {
   const serverIds = useRef(new Map());
   const keyByServerId = useRef(new Map());
   const lastId = useRef(0);
+  const liveRef = useRef(null);
+  const pendingJoins = useRef(new Map());
+
+  const addPersonal = useCallback((conversation, otherUser) => {
+    const convo = personalConvo(conversation, otherUser);
+    serverIds.current.set(convo.id, Promise.resolve(conversation.id));
+    keyByServerId.current.set(conversation.id, convo.id);
+    setConvos((cs) => (cs.some((c) => c.id === convo.id) ? cs : [...cs, convo]));
+    return convo.id;
+  }, []);
 
   const ensureConversation = useCallback((convo) => {
     let id = serverIds.current.get(convo.id);
@@ -135,6 +162,7 @@ export default function ChatApp({ user, activeId, onLogout }) {
     setSync("loading");
     try {
       const { conversations } = await request("/conversations", { auth: true });
+      conversations.filter((c) => c.personal && c.otherUser).forEach((c) => addPersonal(c, c.otherUser));
       conversations.forEach((c) => {
         if (c.clientKey && c.createdBy === user.id && !serverIds.current.has(c.clientKey)) {
           serverIds.current.set(c.clientKey, Promise.resolve(c.id));
@@ -151,7 +179,7 @@ export default function ChatApp({ user, activeId, onLogout }) {
       if (err.status === 401) return onLogout();
       setSync(err.message || "Couldn't load your saved messages.");
     }
-  }, [ensureConversation, fetchSince, applyIncoming, user.id, onLogout]);
+  }, [ensureConversation, fetchSince, applyIncoming, addPersonal, user.id, onLogout]);
 
   useEffect(() => {
     loadHistory();
@@ -164,21 +192,60 @@ export default function ChatApp({ user, activeId, onLogout }) {
   const onLogoutRef = useRef(onLogout);
   onLogoutRef.current = onLogout;
 
+  const joinRoom = useCallback(
+    (payload) =>
+      liveRef.current.emit("join_room", payload).then((res) => {
+        const { conversation, messages } = res;
+        if (conversation.personal && conversation.otherUser) addPersonal(conversation, conversation.otherUser);
+        applyIncoming(messages, { countUnread: true });
+        return res;
+      }),
+    [addPersonal, applyIncoming]
+  );
+
+  const onLiveMessage = useCallback(
+    (m) => {
+      if (keyByServerId.current.has(m.conversationId)) {
+        applyIncoming([m], { countUnread: true });
+        return;
+      }
+      let pending = pendingJoins.current.get(m.conversationId);
+      if (!pending) {
+        pending = joinRoom({ conversationId: m.conversationId }).finally(() => pendingJoins.current.delete(m.conversationId));
+        pendingJoins.current.set(m.conversationId, pending);
+      }
+      pending.then(() => applyIncoming([m], { countUnread: true })).catch(() => {});
+    },
+    [applyIncoming, joinRoom]
+  );
+
   useEffect(() => {
     if (!isReady) return undefined;
-    return connectLive({
+    const live = connectLive({
       getToken,
       onStatus: setLiveStatus,
       onPresence: setOnline,
-      onMessage: (m) => applyIncoming([m], { countUnread: true }),
+      onMessage: onLiveMessage,
       onReady: () => {
+        convosRef.current.filter((c) => c.personal).forEach((c) => joinRoom({ conversationId: c.serverId }).catch(() => {}));
         fetchSince(lastId.current || null)
           .then((missed) => applyIncoming(missed, { countUnread: true }))
           .catch(() => {});
       },
       onUnauthorized: () => onLogoutRef.current(),
     });
-  }, [isReady, applyIncoming, fetchSince]);
+    liveRef.current = live;
+    return () => {
+      live.stop();
+      liveRef.current = null;
+    };
+  }, [isReady, applyIncoming, fetchSince, joinRoom, onLiveMessage]);
+
+  async function startChat(email) {
+    if (!liveRef.current) throw new Error("Still connecting. Try again in a moment.");
+    const { conversation } = await joinRoom({ email });
+    window.location.hash = `/chat/${keyByServerId.current.get(conversation.id)}`;
+  }
 
   const receive = useCallback(
     (convoId, from, text) => {
@@ -219,11 +286,11 @@ export default function ChatApp({ user, activeId, onLogout }) {
   async function save(convoId, msg) {
     try {
       const conversationId = await ensureConversation(convosRef.current.find((c) => c.id === convoId));
-      const { message } = await request("/messages", {
-        method: "POST",
-        auth: true,
-        body: { conversationId, text: msg.text, clientId: msg.id },
-      });
+      const body = { conversationId, text: msg.text, clientId: msg.id };
+      const live = liveRef.current;
+      const { message } = live?.isConnected()
+        ? await live.emit("new_message", body)
+        : await request("/messages", { method: "POST", auth: true, body });
       patchMessage(convoId, msg.id, (m) => ({ ...m, status: "sent", serverId: message.id }));
     } catch (err) {
       const error = err.fields?.text || err.message || "Couldn't send. Check your connection.";
@@ -235,7 +302,8 @@ export default function ChatApp({ user, activeId, onLogout }) {
   }
 
   function simulateReply(convoId) {
-    if (replying.current.has(convoId) || convosRef.current.find((c) => c.id === convoId)?.live) return;
+    const target = convosRef.current.find((c) => c.id === convoId);
+    if (replying.current.has(convoId) || target?.live || target?.personal) return;
     replying.current.add(convoId);
     const convo = convosRef.current.find((c) => c.id === convoId);
     const who = pick(convo.members);
@@ -264,6 +332,7 @@ export default function ChatApp({ user, activeId, onLogout }) {
         onLogout={onLogout}
         syncError={sync !== "loading" && sync !== "ready" ? sync : null}
         onRetrySync={loadHistory}
+        onStartChat={startChat}
       />
       <main className="pane">
         {sync === "loading" ? (

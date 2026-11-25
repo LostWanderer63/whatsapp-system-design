@@ -28,7 +28,15 @@ Conversation.belongsTo(User, {
 });
 
 Conversation.prototype.toPublic = function toPublic() {
-  return { id: String(this.id), kind: this.kind, title: this.title, clientKey: this.clientKey, createdBy: this.createdBy, createdAt: this.createdAt };
+  return {
+    id: String(this.id),
+    kind: this.kind,
+    title: this.title,
+    clientKey: this.clientKey,
+    personal: Boolean(this.directKey),
+    createdBy: this.createdBy,
+    createdAt: this.createdAt,
+  };
 };
 
 Conversation.LOUNGE_KEY = "lounge";
