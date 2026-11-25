@@ -20,6 +20,13 @@ module.exports = {
     secret: required("JWT_SECRET"),
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   },
+  socket: {
+    port: Number(process.env.SOCKET_PORT) || 3000,
+    origins: (process.env.CLIENT_ORIGINS || `http://localhost:5173,http://localhost:${Number(process.env.PORT) || 4000}`)
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean),
+  },
   bcryptRounds: Number(process.env.BCRYPT_SALT_ROUNDS) || 10,
   defaultCountryCode: (process.env.DEFAULT_COUNTRY_CODE || "91").replace(/\D/g, ""),
 };

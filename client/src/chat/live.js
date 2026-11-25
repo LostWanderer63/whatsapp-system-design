@@ -1,55 +1,37 @@
-const MAX_DELAY = 30000;
+import { io } from "socket.io-client";
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || `${window.location.protocol}//${window.location.hostname}:3000`;
 
 export function connectLive({ getToken, onReady, onMessage, onPresence, onStatus, onUnauthorized }) {
-  let ws = null;
-  let attempt = 0;
-  let timer = null;
-  let stopped = false;
+  const socket = io(SOCKET_URL, {
+    auth: (cb) => cb({ token: getToken() }),
+  });
 
-  function open() {
-    onStatus("connecting");
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+  onStatus("connecting");
 
-    ws.onopen = () => ws.send(JSON.stringify({ type: "auth", token: getToken() }));
+  socket.on("connect", () => {
+    onStatus("online");
+    onReady();
+  });
 
-    ws.onmessage = (event) => {
-      let data;
-      try {
-        data = JSON.parse(event.data);
-      } catch {
-        return;
-      }
-      if (data.type === "ready") {
-        attempt = 0;
-        onStatus("online");
-        onReady();
-      } else if (data.type === "message") {
-        onMessage(data.message);
-      } else if (data.type === "presence") {
-        onPresence(data.online);
-      }
-    };
+  socket.on("disconnect", (reason) => {
+    onStatus("offline");
+    if (reason === "io server disconnect") socket.connect();
+  });
 
-    ws.onclose = (event) => {
-      ws = null;
-      if (stopped) return;
-      onStatus("offline");
-      if (event.code === 4001) {
-        onUnauthorized();
-        return;
-      }
-      const delay = Math.min(MAX_DELAY, 1000 * 2 ** attempt) * (0.75 + Math.random() * 0.5);
-      attempt += 1;
-      timer = setTimeout(open, delay);
-    };
-  }
+  socket.io.on("reconnect_attempt", () => onStatus("connecting"));
 
-  open();
+  socket.on("connect_error", (err) => {
+    if (err.message === "Unauthorized") {
+      socket.disconnect();
+      onUnauthorized();
+      return;
+    }
+    onStatus("offline");
+  });
 
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-    ws?.close();
-  };
+  socket.on("message", onMessage);
+  socket.on("presence", ({ online }) => onPresence(online));
+
+  return () => socket.disconnect();
 }

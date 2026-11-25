@@ -20,7 +20,7 @@ The database (`DB_NAME`, default `chorus`) and the `users` table are created aut
 ## Run
 
 ```bash
-npm run dev     # React on http://localhost:5173, API on http://localhost:4000
+npm run dev     # React on http://localhost:5173, API on http://localhost:4000, Socket.IO on http://localhost:3000
 npm start       # builds the React app and serves everything on http://localhost:4000
 ```
 
@@ -39,19 +39,18 @@ npm start       # builds the React app and serves everything on http://localhost
 
 All but signup/login need `Authorization: Bearer <token>`.
 
-### Live messages (WebSocket)
+### Live messages (Socket.IO)
 
-Connect to `ws://<host>/ws` (same port as the API; Vite proxies it in dev) and send `{"type":"auth","token":"<jwt>"}` as the first message within 5 seconds. The token goes in a message rather than the URL so it doesn't end up in logs. Bad or missing auth closes the socket with code `4001`.
+A Socket.IO server runs on **http://localhost:3000** (`SOCKET_PORT`) in the same process as the API, so it can push a message the moment it's saved. Allowed browser origins come from `CLIENT_ORIGINS` (default: the Vite dev server and the API port).
 
-The server then pushes:
+The client connects with `socket.io-client`, passing the JWT in the handshake: `io("http://localhost:3000", { auth: { token } })`. A missing or invalid token fails with a `connect_error` whose message is `Unauthorized`. Each user joins a private room, `user:<id>`.
 
-| Event | When |
+| Event (server → client) | When |
 |---|---|
-| `{"type":"ready"}` | authenticated |
-| `{"type":"message","message":{…}}` | a message was saved in a chat you're a member of (same shape as `GET /api/messages`) |
-| `{"type":"presence","online":n}` | someone connected or disconnected |
+| `message` | a message was saved in a chat you're a member of (same shape as `GET /api/messages`) |
+| `presence` | `{ online }`: number of distinct users connected changed |
 
-Sending still goes through `POST /api/messages`, so validation, membership checks and retry-safety live in one place; the server broadcasts after the row is stored. On every (re)connect the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline, and reconnects with exponential backoff. Dead connections are dropped by a 30-second ping. Chats you aren't a member of return 404, so their existence isn't revealed.
+Sending still goes through `POST /api/messages`, so validation, membership checks and retry-safety live in one place. Socket.IO handles reconnection; on every `connect` the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline. Set `VITE_SOCKET_URL` to point the frontend at a different Socket.IO server.
 
 ### Tables
 
