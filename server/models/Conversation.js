@@ -10,6 +10,7 @@ const Conversation = sequelize.define(
     title: { type: DataTypes.STRING(100), allowNull: false },
     clientKey: { type: DataTypes.STRING(64), allowNull: true, field: "client_key" },
     directKey: { type: DataTypes.STRING(32), allowNull: true, unique: "conversations_direct_key", field: "direct_key" },
+    inviteCode: { type: DataTypes.STRING(16), allowNull: true, unique: "conversations_invite_code", field: "invite_code" },
   },
   {
     tableName: "conversations",
@@ -34,6 +35,7 @@ Conversation.prototype.toPublic = function toPublic() {
     title: this.title,
     clientKey: this.clientKey,
     personal: Boolean(this.directKey),
+    group: Boolean(this.inviteCode),
     createdBy: this.createdBy,
     createdAt: this.createdAt,
   };

@@ -10,6 +10,8 @@ export const PEOPLE = {
 
 const TONES = ["violet", "mint", "butter", "coral", "sky"];
 
+export const toneFor = (n) => TONES[Math.abs(Number(n) || 0) % TONES.length];
+
 export function rememberPerson(userId, name) {
   const key = `u${userId}`;
   PEOPLE[key] ??= { name: name || "Someone", tone: TONES[userId % TONES.length] };

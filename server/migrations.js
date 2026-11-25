@@ -73,10 +73,18 @@ async function addDirectKey() {
   );
 }
 
+async function addInviteCode() {
+  if (await columnType("conversations", "invite_code")) return;
+  await sequelize.query(
+    "ALTER TABLE conversations ADD COLUMN invite_code VARCHAR(16) NULL, ADD UNIQUE INDEX conversations_invite_code (invite_code)"
+  );
+}
+
 async function runMigrations() {
   await linkMessagesToConversations();
   await allowSharedConversations();
   await addDirectKey();
+  await addInviteCode();
 }
 
 module.exports = { runMigrations };

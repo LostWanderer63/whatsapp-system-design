@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ConversationList from "./ConversationList.jsx";
 import ConversationView from "./ConversationView.jsx";
-import { INCOMING, ME, PEOPLE, REPLIES, firstName, nextId, rememberPerson, seedConversations } from "./data.js";
+import GroupDialog from "./GroupDialog.jsx";
+import { INCOMING, ME, PEOPLE, REPLIES, firstName, nextId, rememberPerson, seedConversations, toneFor } from "./data.js";
 import { getToken, request } from "../api.js";
-import { connectLive } from "./live.js";
+import { createChatSocket } from "./socket.js";
+import { EVENTS } from "./events.js";
 import { normalizeEmail, roomIdFor } from "./roomId.js";
 import "./chat.css";
 
@@ -27,22 +29,35 @@ function mergeHistory(convo, stored, userId) {
   return { ...convo, messages: [...convo.messages, ...fresh].sort((a, b) => a.at - b.at) };
 }
 
-function personalConvo(conversation, otherUser) {
-  const from = rememberPerson(otherUser.id, otherUser.name);
-  return {
-    id: `dm${conversation.id}`,
-    kind: "direct",
-    personal: true,
-    serverId: conversation.id,
-    roomId: conversation.roomId,
-    title: otherUser.name,
-    tone: PEOPLE[from].tone,
-    members: [from],
-    messages: [],
-    unread: 0,
-    typing: null,
-    openedAt: Date.now(),
-  };
+function convoFromServer(desc, userId) {
+  if (desc.personal && desc.otherUser) {
+    const from = rememberPerson(desc.otherUser.id, desc.otherUser.name);
+    return {
+      id: `dm${desc.id}`,
+      kind: "direct",
+      personal: true,
+      serverId: desc.id,
+      roomId: desc.roomId,
+      title: desc.otherUser.name,
+      tone: PEOPLE[from].tone,
+      members: [from],
+    };
+  }
+  if (desc.group) {
+    const others = desc.members.filter((m) => m.id !== userId);
+    return {
+      id: `g${desc.id}`,
+      kind: "group",
+      group: true,
+      serverId: desc.id,
+      title: desc.title,
+      tone: toneFor(Number(desc.id) + 2),
+      members: others.map((m) => rememberPerson(m.id, m.name)),
+      memberList: desc.members,
+      inviteCode: desc.inviteCode,
+    };
+  }
+  return null;
 }
 
 export default function ChatApp({ user, activeId, onLogout }) {
@@ -53,6 +68,7 @@ export default function ChatApp({ user, activeId, onLogout }) {
   const [sync, setSync] = useState("loading");
   const [liveStatus, setLiveStatus] = useState("connecting");
   const [online, setOnline] = useState(null);
+  const [groupDialog, setGroupDialog] = useState(null);
 
   const active = convos.find((c) => c.id === activeId) || null;
 
@@ -69,6 +85,8 @@ export default function ChatApp({ user, activeId, onLogout }) {
   activeRef.current = active?.id ?? null;
   const convosRef = useRef(convos);
   convosRef.current = convos;
+  const onLogoutRef = useRef(onLogout);
+  onLogoutRef.current = onLogout;
 
   const timers = useRef(new Set());
   const replying = useRef(new Set());
@@ -93,16 +111,41 @@ export default function ChatApp({ user, activeId, onLogout }) {
   const serverIds = useRef(new Map());
   const keyByServerId = useRef(new Map());
   const lastId = useRef(0);
-  const liveRef = useRef(null);
-  const pendingJoins = useRef(new Map());
+  const chat = useRef(null);
+  const syncing = useRef(null);
 
-  const addPersonal = useCallback((conversation, otherUser) => {
-    const convo = personalConvo(conversation, otherUser);
-    serverIds.current.set(convo.id, Promise.resolve(conversation.id));
-    keyByServerId.current.set(conversation.id, convo.id);
-    setConvos((cs) => (cs.some((c) => c.id === convo.id) ? cs : [...cs, convo]));
-    return convo.id;
+  const addServerConversation = useCallback(
+    (desc) => {
+      const built = convoFromServer(desc, user.id);
+      if (!built) return null;
+      serverIds.current.set(built.id, Promise.resolve(desc.id));
+      keyByServerId.current.set(desc.id, built.id);
+      setConvos((cs) =>
+        cs.some((c) => c.id === built.id)
+          ? cs.map((c) => (c.id === built.id ? { ...c, ...built } : c))
+          : [...cs, { ...built, messages: [], unread: 0, typing: null, openedAt: Date.now() }]
+      );
+      return built.id;
+    },
+    [user.id]
+  );
+
+  const removeConversation = useCallback((serverId) => {
+    const key = keyByServerId.current.get(serverId);
+    if (!key) return;
+    keyByServerId.current.delete(serverId);
+    serverIds.current.delete(key);
+    setConvos((cs) => cs.filter((c) => c.id !== key));
+    if (activeRef.current === key) window.location.hash = "/chat";
   }, []);
+
+  const addSystemNote = useCallback(
+    (serverId, text) => {
+      const key = keyByServerId.current.get(serverId);
+      if (key) update(key, (c) => ({ ...c, messages: [...c.messages, { id: nextId(), system: true, text, at: Date.now() }] }));
+    },
+    [update]
+  );
 
   const ensureConversation = useCallback((convo) => {
     let id = serverIds.current.get(convo.id);
@@ -158,19 +201,30 @@ export default function ChatApp({ user, activeId, onLogout }) {
     }
   }, []);
 
+  const syncConversations = useCallback(() => {
+    syncing.current ??= request("/conversations", { auth: true })
+      .then(({ conversations }) => {
+        conversations.forEach((c) => {
+          if (c.personal || c.group) addServerConversation(c);
+          else if (c.clientKey && c.createdBy === user.id && !serverIds.current.has(c.clientKey)) {
+            serverIds.current.set(c.clientKey, Promise.resolve(c.id));
+            keyByServerId.current.set(c.id, c.clientKey);
+          }
+        });
+        return conversations;
+      })
+      .finally(() => {
+        syncing.current = null;
+      });
+    return syncing.current;
+  }, [addServerConversation, user.id]);
+
   const loadRun = useRef(0);
   const loadHistory = useCallback(async () => {
     const run = ++loadRun.current;
     setSync("loading");
     try {
-      const { conversations } = await request("/conversations", { auth: true });
-      conversations.filter((c) => c.personal && c.otherUser).forEach((c) => addPersonal(c, c.otherUser));
-      conversations.forEach((c) => {
-        if (c.clientKey && c.createdBy === user.id && !serverIds.current.has(c.clientKey)) {
-          serverIds.current.set(c.clientKey, Promise.resolve(c.id));
-          keyByServerId.current.set(c.id, c.clientKey);
-        }
-      });
+      await syncConversations();
       await Promise.all(convosRef.current.map((c) => ensureConversation(c)));
       const all = await fetchSince(null);
       if (run !== loadRun.current) return;
@@ -178,10 +232,10 @@ export default function ChatApp({ user, activeId, onLogout }) {
       setSync("ready");
     } catch (err) {
       if (run !== loadRun.current) return;
-      if (err.status === 401) return onLogout();
+      if (err.status === 401) return onLogoutRef.current();
       setSync(err.message || "Couldn't load your saved messages.");
     }
-  }, [ensureConversation, fetchSince, applyIncoming, addPersonal, user.id, onLogout]);
+  }, [syncConversations, ensureConversation, fetchSince, applyIncoming]);
 
   useEffect(() => {
     loadHistory();
@@ -191,68 +245,86 @@ export default function ChatApp({ user, activeId, onLogout }) {
   }, []);
 
   const isReady = sync === "ready";
-  const onLogoutRef = useRef(onLogout);
-  onLogoutRef.current = onLogout;
-
-  const joinRoom = useCallback(
-    (payload) =>
-      liveRef.current.emit("join_room", payload).then((res) => {
-        const { conversation, messages } = res;
-        if (conversation.personal && conversation.otherUser) addPersonal(conversation, conversation.otherUser);
-        applyIncoming(messages, { countUnread: true });
-        return res;
-      }),
-    [addPersonal, applyIncoming]
-  );
-
-  const onLiveMessage = useCallback(
-    (m) => {
-      if (keyByServerId.current.has(m.conversationId)) {
-        applyIncoming([m], { countUnread: true });
-        return;
-      }
-      let pending = pendingJoins.current.get(m.conversationId);
-      if (!pending) {
-        pending = joinRoom({ conversationId: m.conversationId }).finally(() => pendingJoins.current.delete(m.conversationId));
-        pendingJoins.current.set(m.conversationId, pending);
-      }
-      pending.then(() => applyIncoming([m], { countUnread: true })).catch(() => {});
-    },
-    [applyIncoming, joinRoom]
-  );
 
   useEffect(() => {
     if (!isReady) return undefined;
-    const live = connectLive({
+    const catchUp = () =>
+      syncConversations()
+        .then(() => fetchSince(lastId.current || null))
+        .then((missed) => applyIncoming(missed, { countUnread: true }))
+        .catch(() => {});
+
+    const refreshMembers = (conversationId, members) => {
+      const key = keyByServerId.current.get(conversationId);
+      const convo = convosRef.current.find((c) => c.id === key);
+      if (convo?.group) addServerConversation({ id: conversationId, group: true, title: convo.title, inviteCode: convo.inviteCode, members });
+    };
+
+    const socket = createChatSocket({
       getToken,
       onStatus: setLiveStatus,
-      onPresence: setOnline,
-      onMessage: onLiveMessage,
-      onReady: () => {
-        convosRef.current
-          .filter((c) => c.personal)
-          .forEach((c) => joinRoom(c.roomId ? { roomId: c.roomId } : { conversationId: c.serverId }).catch(() => {}));
-        fetchSince(lastId.current || null)
-          .then((missed) => applyIncoming(missed, { countUnread: true }))
-          .catch(() => {});
+      onConnected: ({ recovered }) => {
+        if (!recovered) catchUp();
       },
       onUnauthorized: () => onLogoutRef.current(),
+      on: {
+        [EVENTS.NEW_MESSAGE]: (m) => {
+          if (keyByServerId.current.has(m.conversationId)) applyIncoming([m], { countUnread: true });
+          else syncConversations().then(() => applyIncoming([m], { countUnread: true })).catch(() => {});
+        },
+        [EVENTS.CONVERSATION_ADDED]: ({ conversation }) => addServerConversation(conversation),
+        [EVENTS.CONVERSATION_REMOVED]: ({ conversationId }) => removeConversation(conversationId),
+        [EVENTS.GROUP_MEMBER_JOINED]: ({ conversationId, user: who, members }) => {
+          refreshMembers(conversationId, members);
+          addSystemNote(conversationId, who.id === user.id ? "You joined" : `${who.name} joined`);
+        },
+        [EVENTS.GROUP_MEMBER_LEFT]: ({ conversationId, user: who, members }) => {
+          if (who.id === user.id) return;
+          refreshMembers(conversationId, members);
+          addSystemNote(conversationId, `${who.name} left`);
+        },
+        [EVENTS.PRESENCE]: ({ online: count }) => setOnline(count),
+      },
     });
-    liveRef.current = live;
+    chat.current = socket;
     return () => {
-      live.stop();
-      liveRef.current = null;
+      socket.close();
+      chat.current = null;
     };
-  }, [isReady, applyIncoming, fetchSince, joinRoom, onLiveMessage]);
+  }, [isReady, syncConversations, fetchSince, applyIncoming, addServerConversation, removeConversation, addSystemNote, user.id]);
+
+  function requireSocket() {
+    if (!chat.current) throw new Error("Still connecting. Try again in a moment.");
+    return chat.current;
+  }
+
+  function openFromServer({ conversation, messages }) {
+    const key = addServerConversation(conversation);
+    applyIncoming(messages, { countUnread: false });
+    window.location.hash = `/chat/${key}`;
+  }
 
   async function startChat(email) {
     const theirEmail = normalizeEmail(email);
     if (theirEmail === normalizeEmail(user.email)) throw new Error("You can't start a personal chat with yourself.");
-    if (!liveRef.current) throw new Error("Still connecting. Try again in a moment.");
+    const socket = requireSocket();
     await request(`/users/lookup?email=${encodeURIComponent(theirEmail)}`, { auth: true });
-    const roomId = roomIdFor(user.email, theirEmail);
-    const { conversation } = await joinRoom({ roomId });
-    window.location.hash = `/chat/${keyByServerId.current.get(conversation.id)}`;
+    openFromServer(await socket.openPersonalChat(roomIdFor(user.email, theirEmail)));
+  }
+
+  async function createGroup(name, memberEmails) {
+    openFromServer(await requireSocket().createGroup(name, memberEmails));
+  }
+
+  async function joinGroup(inviteCode) {
+    openFromServer(await requireSocket().joinGroup(inviteCode));
+  }
+
+  async function leaveGroup(convoKey) {
+    const convo = convosRef.current.find((c) => c.id === convoKey);
+    if (!convo?.group) return;
+    await requireSocket().leaveGroup(convo.serverId);
+    removeConversation(convo.serverId);
   }
 
   const receive = useCallback(
@@ -295,9 +367,9 @@ export default function ChatApp({ user, activeId, onLogout }) {
     try {
       const conversationId = await ensureConversation(convosRef.current.find((c) => c.id === convoId));
       const body = { conversationId, text: msg.text, clientId: msg.id };
-      const live = liveRef.current;
-      const { message } = live?.isConnected()
-        ? await live.emit("new_message", body)
+      const socket = chat.current;
+      const { message } = socket?.isConnected()
+        ? await socket.sendMessage(body)
         : await request("/messages", { method: "POST", auth: true, body });
       patchMessage(convoId, msg.id, (m) => ({ ...m, status: "sent", serverId: message.id }));
     } catch (err) {
@@ -310,10 +382,9 @@ export default function ChatApp({ user, activeId, onLogout }) {
   }
 
   function simulateReply(convoId) {
-    const target = convosRef.current.find((c) => c.id === convoId);
-    if (replying.current.has(convoId) || target?.live || target?.personal) return;
-    replying.current.add(convoId);
     const convo = convosRef.current.find((c) => c.id === convoId);
+    if (!convo || replying.current.has(convoId) || convo.live || convo.personal || convo.group) return;
+    replying.current.add(convoId);
     const who = pick(convo.members);
     const reply = pick(REPLIES[convoId] || ["👍"]);
     const typingFor = Math.min(3500, 1200 + reply.length * 35);
@@ -329,6 +400,8 @@ export default function ChatApp({ user, activeId, onLogout }) {
     document.title = `${totalUnread ? `(${totalUnread}) ` : ""}${active ? active.title : "Chats"} · Chorus`;
   }, [totalUnread, active]);
 
+  const closeGroupDialog = useCallback(() => setGroupDialog(null), []);
+
   return (
     <div className="app" data-open={active ? "" : undefined}>
       <ConversationList
@@ -341,6 +414,7 @@ export default function ChatApp({ user, activeId, onLogout }) {
         syncError={sync !== "loading" && sync !== "ready" ? sync : null}
         onRetrySync={loadHistory}
         onStartChat={startChat}
+        onNewGroup={() => setGroupDialog("create")}
       />
       <main className="pane">
         {sync === "loading" ? (
@@ -356,12 +430,17 @@ export default function ChatApp({ user, activeId, onLogout }) {
             onDraft={(text) => setDrafts((d) => ({ ...d, [active.id]: text }))}
             onSend={(text) => send(active.id, text)}
             onRetry={(id) => retry(active.id, id)}
+            onLeaveGroup={() => leaveGroup(active.id)}
+            meId={user.id}
             presence={liveStatus === "online" ? `Everyone on Chorus · ${online ?? 1} online` : liveStatus === "connecting" ? "Connecting…" : "Offline · reconnecting…"}
           />
         ) : (
           <EmptyPane name={user.name} />
         )}
       </main>
+      {groupDialog && (
+        <GroupDialog mode={groupDialog} onModeChange={setGroupDialog} onCreate={createGroup} onJoin={joinGroup} onClose={closeGroupDialog} />
+      )}
     </div>
   );
 }

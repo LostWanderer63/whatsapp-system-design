@@ -2,26 +2,33 @@ const http = require("http");
 const { Server } = require("socket.io");
 const config = require("../config");
 const { authenticate } = require("./middleware");
+const { addUsersToConversation } = require("./rooms");
 const chat = require("./handlers/chat");
-const { registerPresenceHandlers } = require("./handlers/presence");
 const { registerPersonalChatHandlers } = require("./handlers/personalChat");
+const { registerGroupChatHandlers } = require("./handlers/groupChat");
+const { registerPresenceHandlers } = require("./handlers/presence");
+
+const RECOVERY_WINDOW_MS = 2 * 60 * 1000;
 
 let io = null;
+let httpServer = null;
 
 function startSocketServer() {
-  const httpServer = http.createServer();
+  httpServer = http.createServer();
   io = new Server(httpServer, {
     cors: { origin: config.socket.origins },
     serveClient: false,
     maxHttpBufferSize: 32 * 1024,
+    connectionStateRecovery: { maxDisconnectionDuration: RECOVERY_WINDOW_MS },
   });
 
   io.use(authenticate);
 
   io.on("connection", (socket) => {
-    chat.registerChatHandlers(io, socket);
-    registerPresenceHandlers(io, socket);
     registerPersonalChatHandlers(io, socket);
+    registerGroupChatHandlers(io, socket);
+    registerPresenceHandlers(io, socket);
+    chat.registerChatHandlers(io, socket).catch((err) => console.error("Joining rooms failed:", err.message));
   });
 
   httpServer.on("error", (err) => {
@@ -32,8 +39,19 @@ function startSocketServer() {
   return io;
 }
 
-async function publishMessage(message) {
-  if (io) await chat.publishMessage(io, message);
+function publishMessage(message) {
+  if (io) chat.publishMessage(io, message);
 }
 
-module.exports = { startSocketServer, publishMessage };
+function addUserToConversation(userId, conversationId) {
+  if (io) addUsersToConversation(io, conversationId, [userId]);
+}
+
+function closeSocketServer() {
+  return new Promise((resolve) => {
+    if (!io) return resolve();
+    io.close(() => resolve());
+  });
+}
+
+module.exports = { startSocketServer, publishMessage, addUserToConversation, closeSocketServer };

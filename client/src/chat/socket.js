@@ -1,27 +1,22 @@
 import { io } from "socket.io-client";
+import { EVENTS } from "./events.js";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || `${window.location.protocol}//${window.location.hostname}:3000`;
 const ACK_TIMEOUT = 8000;
 
-export function connectLive({ getToken, onReady, onMessage, onPresence, onStatus, onUnauthorized }) {
-  const socket = io(SOCKET_URL, {
-    auth: (cb) => cb({ token: getToken() }),
-  });
+export function createChatSocket({ getToken, onStatus, onConnected, onUnauthorized, on }) {
+  const socket = io(SOCKET_URL, { auth: (cb) => cb({ token: getToken() }) });
 
   onStatus("connecting");
-
   socket.on("connect", () => {
     onStatus("online");
-    onReady();
+    onConnected({ recovered: socket.recovered });
   });
-
   socket.on("disconnect", (reason) => {
     onStatus("offline");
     if (reason === "io server disconnect") socket.connect();
   });
-
   socket.io.on("reconnect_attempt", () => onStatus("connecting"));
-
   socket.on("connect_error", (err) => {
     if (err.message === "Unauthorized") {
       socket.disconnect();
@@ -31,10 +26,9 @@ export function connectLive({ getToken, onReady, onMessage, onPresence, onStatus
     onStatus("offline");
   });
 
-  socket.on("new_message", onMessage);
-  socket.on("presence", ({ online }) => onPresence(online));
+  for (const [event, handler] of Object.entries(on)) socket.on(event, handler);
 
-  function emit(event, data) {
+  function call(event, data) {
     return new Promise((resolve, reject) => {
       if (!socket.connected) {
         reject(new Error("You're offline. Reconnecting…"));
@@ -49,8 +43,16 @@ export function connectLive({ getToken, onReady, onMessage, onPresence, onStatus
   }
 
   return {
-    emit,
     isConnected: () => socket.connected,
-    stop: () => socket.disconnect(),
+    sendMessage: (message) => call(EVENTS.NEW_MESSAGE, message),
+    openPersonalChat: (roomId) => call(EVENTS.JOIN_ROOM, { roomId }),
+    createGroup: (name, memberEmails) => call(EVENTS.CREATE_GROUP, { name, memberEmails }),
+    joinGroup: (inviteCode) => call(EVENTS.JOIN_GROUP, { inviteCode }),
+    leaveGroup: (conversationId) => call(EVENTS.LEAVE_GROUP, { conversationId }),
+    close: () => {
+      socket.removeAllListeners();
+      socket.io.removeAllListeners();
+      socket.disconnect();
+    },
   };
 }

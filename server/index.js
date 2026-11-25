@@ -10,7 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const { initDB } = require("./db");
-const { startSocketServer } = require("./socket-io");
+const { startSocketServer, closeSocketServer } = require("./socket-io");
 const authRoutes = require("./routes/auth");
 const messageRoutes = require("./routes/messages");
 const conversationRoutes = require("./routes/conversations");
@@ -38,6 +38,17 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ message: "Something went wrong on our side. Please try again." });
 });
+
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received, closing connections…`);
+  setTimeout(() => process.exit(0), 3000).unref();
+  closeSocketServer().finally(() => process.exit(0));
+}
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 initDB()
   .then(() => {

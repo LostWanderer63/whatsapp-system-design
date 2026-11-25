@@ -48,7 +48,7 @@ router.post("/", requireAuth, async (req, res, next) => {
     const message = await Message.create({ senderId: req.userId, ...values });
     const sender = await User.findByPk(req.userId, { attributes: ["name"] });
     const payload = { ...message.toPublic(), senderName: sender?.name };
-    publishMessage(payload).catch((err) => console.error("Live delivery failed:", err.message));
+    publishMessage(payload);
     return res.status(201).json({ message: payload });
   } catch (err) {
     if (err instanceof UniqueConstraintError && values.clientId) {

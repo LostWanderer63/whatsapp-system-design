@@ -7,7 +7,8 @@ const ConversationMember = require("../models/ConversationMember");
 const Message = require("../models/Message");
 const { requireAuth } = require("../middleware/auth");
 const { validateConversation, parseId } = require("../validation");
-const { roomIdFor } = require("../socket-io/roomId");
+const { describeConversations } = require("../services/conversations");
+const { addUserToConversation } = require("../socket-io");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -20,28 +21,7 @@ router.get("/", async (req, res, next) => {
       include: [{ model: ConversationMember, as: "members", where: { userId: req.userId }, attributes: [] }],
       order: [["id", "ASC"]],
     });
-    const personalIds = conversations.filter((c) => c.directKey).map((c) => c.id);
-    const [me, others] = personalIds.length
-      ? await Promise.all([
-          User.findByPk(req.userId, { attributes: ["email"] }),
-          ConversationMember.findAll({
-            where: { conversationId: personalIds, userId: { [Op.ne]: req.userId } },
-            include: [{ model: User, attributes: ["id", "name", "email"] }],
-          }),
-        ])
-      : [null, []];
-    const otherByConversation = new Map(others.filter((m) => m.User).map((m) => [String(m.conversationId), m.User]));
-    return res.json({
-      conversations: conversations.map((c) => {
-        const other = otherByConversation.get(String(c.id));
-        if (!c.directKey) return c.toPublic();
-        return {
-          ...c.toPublic(),
-          roomId: other && me ? roomIdFor(me.email, other.email) : null,
-          otherUser: other ? { id: other.id, name: other.name } : null,
-        };
-      }),
-    });
+    return res.json({ conversations: await describeConversations(conversations, req.userId) });
   } catch (err) {
     return next(err);
   }
@@ -83,6 +63,7 @@ router.post("/lounge/join", async (req, res, next) => {
       where: { conversationId: lounge.id, userId: req.userId },
       defaults: { role: "member" },
     });
+    addUserToConversation(req.userId, lounge.id);
     return res.json({ conversation: lounge.toPublic() });
   } catch (err) {
     if (err instanceof UniqueConstraintError) {

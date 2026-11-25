@@ -1,7 +1,9 @@
+const EVENTS = require("../events");
+
 const connections = new Map();
 
 function broadcastPresence(io) {
-  io.emit("presence", { online: connections.size });
+  io.emit(EVENTS.PRESENCE, { online: connections.size });
 }
 
 function registerPresenceHandlers(io, socket) {

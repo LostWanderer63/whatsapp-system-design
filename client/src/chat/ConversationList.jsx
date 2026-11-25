@@ -7,14 +7,15 @@ function preview(c, draft) {
   if (c.typing) return { kind: "typing", text: c.kind === "group" ? `${firstName(PEOPLE[c.typing].name)} is typing…` : "typing…" };
   if (draft?.trim()) return { kind: "draft", text: draft };
   const last = c.messages[c.messages.length - 1];
-  if (!last) return { kind: "plain", text: c.live ? "Say hi to everyone 👋" : "" };
+  if (!last) return { kind: "plain", text: c.live ? "Say hi to everyone 👋" : c.group ? "New group" : "" };
+  if (last.system) return { kind: "plain", text: last.text };
   const who = last.from === ME ? "You" : c.kind === "group" ? firstName(PEOPLE[last.from].name) : "";
   return { kind: "plain", who, text: last.text.replace(/\s+/g, " ") };
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-export default function ConversationList({ convos, activeId, drafts, liveStatus, user, onLogout, syncError, onRetrySync, onStartChat }) {
+export default function ConversationList({ convos, activeId, drafts, liveStatus, user, onLogout, syncError, onRetrySync, onStartChat, onNewGroup }) {
   const [query, setQuery] = useState("");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
@@ -50,6 +51,12 @@ export default function ConversationList({ convos, activeId, drafts, liveStatus,
           <span>Chorus</span>
         </div>
         <div className="side-me">
+          <button type="button" className="icon-btn" onClick={onNewGroup} aria-label="New group" title="New group">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" strokeWidth="2" />
+              <path d="M3.5 19c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8M18 8v6M15 11h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
           <span title={`Signed in as ${user.name}`}>
             <Avatar name={user.name} tone="violet" size={32} />
           </span>

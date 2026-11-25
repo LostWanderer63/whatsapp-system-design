@@ -42,45 +42,71 @@ All but signup/login need `Authorization: Bearer <token>`.
 
 ### Live messages (Socket.IO)
 
-A Socket.IO server runs on **http://localhost:3000** (`SOCKET_PORT`) in the same process as the API, so it can push a message the moment it's saved. Allowed browser origins come from `CLIENT_ORIGINS` (default: the Vite dev server and the API port).
+A Socket.IO server runs on **http://localhost:3000** (`SOCKET_PORT`) in the same process as the API. Allowed browser origins come from `CLIENT_ORIGINS`. Clients connect with `io("http://localhost:3000", { auth: { token } })`; a missing or invalid token fails with `connect_error` → `Unauthorized`.
 
-The client connects with `socket.io-client`, passing the JWT in the handshake: `io("http://localhost:3000", { auth: { token } })`. A missing or invalid token fails with a `connect_error` whose message is `Unauthorized`. Each user joins a private room, `user:<id>`.
+**How rooms work.** Every chat is a room, `conversation:<id>`, and every user has a private room, `user:<id>`. On connect the server joins the socket to its user room and to the rooms of every chat the user belongs to, so clients never re-join after a reconnect. When someone is added to a chat (new personal chat, new group, joining by code) the server moves all of that user's open sockets into the room with `socketsJoin`, and announces the chat with `conversation_added`. A message is emitted to exactly one room.
 
-| Event (server → client) | When |
-|---|---|
-| `new_message` | a message was saved in a chat you're a member of (same shape as `GET /api/messages`), whether it was sent over REST or the socket |
-| `presence` | `{ online }`: number of distinct users connected changed |
+**Connection state recovery** is on: after a short drop (up to 2 minutes) Socket.IO restores the socket's rooms and replays missed events, and the client skips its catch-up. After a longer outage the client re-syncs its chat list and calls `GET /api/messages?after=<last id>`.
 
-#### Personal chats (client → server, with acknowledgement)
+#### Events
+
+Client → server, each answered through an acknowledgement as `{ ok: true, … }` or `{ ok: false, error }`:
 
 | Event | Payload | Ack |
 |---|---|---|
-| `join_room` | `{ roomId }` or `{ userId }` opens (or creates) your one-to-one chat with that user; `{ conversationId }` re-joins a chat you're in | `{ ok, conversation: { …, otherUser }, messages }` (last 50) or `{ ok: false, error }` |
-| `new_message` | `{ conversationId, text, clientId? }` | `{ ok, message }` or `{ ok: false, error }` |
+| `new_message` | `{ conversationId, text, clientId? }` | `{ message }` |
+| `join_room` | `{ roomId }` or `{ userId }` opens your personal chat with that user; `{ conversationId }` opens a chat you're in | `{ roomId, conversation, messages }` |
+| `create_group` | `{ name, memberEmails: [] }` | `{ conversation, messages }` |
+| `join_group` | `{ inviteCode }` | `{ conversation, messages }` |
+| `leave_group` | `{ conversationId }` | `{}` |
 
-**Room IDs.** A personal chat's room ID is built from both users' emails, lowercased and sorted alphabetically: `roomIdFor("bob@example.com", "alice@example.com")` → `dm:alice@example.com|bob@example.com`, the same whoever starts the chat. The function is in `client/src/chat/roomId.js` and `server/socket-io/roomId.js`. The server never trusts a room ID as sent: it only accepts one that contains the caller's own email and matches the sorted form exactly, so nobody can join a room between two other people.
+Server → client:
 
-`join_room` puts the socket in the room ID and in `conversation:<id>`. `new_message` applies the same checks as `POST /api/messages` (validation, membership, `clientId` retry safety), stores the message, and emits `new_message` to the conversation room and to every member's `user:<id>` room, so the other person gets it even if they haven't opened the chat. There is exactly one personal chat per pair of users, enforced by `conversations.direct_key` (`"<lower id>:<higher id>"`, unique).
+| Event | Payload |
+|---|---|
+| `new_message` | a saved message (same shape as `GET /api/messages`) |
+| `conversation_added` | `{ conversation }`: a chat you were just added to |
+| `conversation_removed` | `{ conversationId }`: you left a group (sent to all your tabs) |
+| `group_member_joined` / `group_member_left` | `{ conversationId, user, members }` |
+| `presence` | `{ online }`: distinct users connected |
 
-In the app, typing a full email into the sidebar search shows **Start a chat**. The client checks the email against `GET /api/users/lookup` first (so made-up addresses stop there), builds the room ID, emits `join_room({ roomId })` and opens the chat. Messages are sent with `socket.emit("new_message", …)` (falling back to `POST /api/messages` while the socket is reconnecting) and received through the `new_message` listener. After every (re)connect the client emits `join_room({ roomId })` for each personal chat, since rooms don't survive a reconnect. A chat someone else starts with you shows up as soon as their first message arrives.
+Event names live in one place on each side (`server/socket-io/events.js`, `client/src/chat/events.js`).
 
-`POST /api/messages` works too and emits the same event, so validation, membership checks and retry-safety stay consistent. Socket.IO handles reconnection; on every `connect` the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline. Set `VITE_SOCKET_URL` to point the frontend at a different Socket.IO server.
+#### Personal chats
 
-Socket.IO code lives in `server/socket-io/`:
+A personal chat's room ID is built from both users' emails, lowercased and sorted: `roomIdFor("bob@example.com", "alice@example.com")` → `dm:alice@example.com|bob@example.com`, the same whoever starts it. The server only accepts a room ID that contains the caller's own email and matches the sorted form exactly. In the app, typing an email into the sidebar search shows **Start a chat**: the client checks it with `GET /api/users/lookup`, builds the room ID and emits `join_room`. One personal chat per pair is enforced by `conversations.direct_key`.
+
+#### Group chats
+
+The people icon in the sidebar opens **New group**: name the group and add people by email (unknown emails are listed back), or switch to **Join with code**. Every group gets an 8-character invite code (no look-alike characters), shown under **Group info** with the member list, the admin badge and **Leave group**. Joins and leaves appear in the chat as notes.
+
+#### Server practices
+
+- One wrapper (`withAck` in `server/socket-io/utils.js`) for every acknowledged event: payload shape check, `ClientError` → `{ ok: false, error }`, logging for unexpected errors, and a per-socket rate limit (30 events per 10 s).
+- Listeners are registered synchronously on connect; room joins happen after, so no early event is missed.
+- REST and socket replies describe chats through the same service (`server/services/conversations.js`).
+- SIGINT/SIGTERM close Socket.IO connections before the process exits.
+
+`POST /api/messages` still works (the client uses it when the socket is down) and emits the same `new_message` event.
 
 ```
 server/socket-io/
-├── index.js          creates the server on SOCKET_PORT, applies middleware, registers handlers
-├── middleware.js     authenticate: verifies the handshake JWT and loads the user
+├── index.js            server setup, middleware, handler registration, helpers for REST routes
+├── middleware.js       authenticate: verifies the handshake JWT and loads the user
+├── events.js           event names
+├── rooms.js            room names and socketsJoin / socketsLeave helpers
+├── roomId.js           personal chat room IDs from two emails
+├── utils.js            withAck, ClientError, rate limiting
 └── handlers/
-    ├── chat.js           joins the user:<id> room; pushes saved messages to chat members
-    ├── personalChat.js   join_room and new_message for one-to-one chats
-    └── presence.js       tracks connected users and emits presence
+    ├── chat.js           joins rooms on connect; new_message
+    ├── personalChat.js   join_room
+    ├── groupChat.js      create_group, join_group, leave_group
+    └── presence.js       online count
 ```
 
 ### Tables
 
-**`conversations`**: `id` BIGINT PK · `kind` (`direct`/`group`) · `title` · `created_by` → `users.id` (NULL for the shared lounge) · `client_key` (unique per creator; the app's demo chats use `trek`, `flat`, …) · `direct_key` (unique; one personal chat per pair of users) · `created_at`
+**`conversations`**: `id` BIGINT PK · `kind` (`direct`/`group`) · `title` · `created_by` → `users.id` (NULL for the shared lounge) · `client_key` (unique per creator; the app's demo chats use `trek`, `flat`, …) · `direct_key` (unique; one personal chat per pair of users) · `invite_code` (unique; set for group chats) · `created_at`
 
 **`conversation_members`**: PK (`conversation_id` → `conversations.id`, `user_id` → `users.id`) · `role` (`owner`/`member`) · `joined_at`. Index on `user_id`. Every message read and write is checked against this table.
 

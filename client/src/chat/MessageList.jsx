@@ -24,8 +24,9 @@ function groupByDay(messages) {
     const next = messages[i + 1];
     const day = startOfDay(m.at);
     if (!days.length || days.at(-1).day !== day) days.push({ day, items: [] });
-    const joinsPrev = prev && prev.from === m.from && startOfDay(prev.at) === day && m.at - prev.at < GROUP_GAP;
-    const joinsNext = next && next.from === m.from && startOfDay(next.at) === day && next.at - m.at < GROUP_GAP;
+    const joins = (other) => other && !other.system && !m.system && other.from === m.from && startOfDay(other.at) === day && Math.abs(m.at - other.at) < GROUP_GAP;
+    const joinsPrev = joins(prev);
+    const joinsNext = joins(next);
     days.at(-1).items.push({ m, first: !joinsPrev, last: !joinsNext });
   });
   return days;
@@ -139,6 +140,13 @@ export default function MessageList({ convo, dividerId, onRetry }) {
               </h2>
               <ol className="msgs">
                 {items.map(({ m, first, last }) => {
+                  if (m.system) {
+                    return (
+                      <li key={m.id} className="sys-note">
+                        <span>{m.text}</span>
+                      </li>
+                    );
+                  }
                   const mine = m.from === ME;
                   const person = PEOPLE[m.from];
                   const jumbo = isJumbo(m.text);
