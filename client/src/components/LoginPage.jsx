@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import Field from "./Field.jsx";
 import PasswordField from "./PasswordField.jsx";
-import { request, setToken, ApiError } from "../api.js";
+import { request, saveSession, ApiError } from "../api.js";
 import { identifierKind, validateLogin } from "../validation.js";
 
-export default function LoginPage({ handoff, onSignup }) {
+export default function LoginPage({ handoff, onSignup, onLoggedIn }) {
   const [identifier, setIdentifier] = useState(handoff?.identifier || "");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
@@ -16,7 +16,6 @@ export default function LoginPage({ handoff, onSignup }) {
   useEffect(() => {
     if (focusTick) document.querySelector(".field.has-error input")?.focus();
   }, [focusTick]);
-  const [loggedIn, setLoggedIn] = useState(null);
 
   const kind = identifierKind(identifier);
   const hint = kind === "email" ? "Logging in with your email." : kind === "phone" ? "Logging in with your phone number." : undefined;
@@ -35,8 +34,8 @@ export default function LoginPage({ handoff, onSignup }) {
     setSubmitting(true);
     try {
       const { token, user } = await request("/auth/login", { method: "POST", body: { identifier, password } });
-      setToken(token);
-      setLoggedIn(user);
+      saveSession(token, user);
+      onLoggedIn(user);
     } catch (err) {
       if (err instanceof ApiError) {
         setErrors(err.fields);
@@ -48,26 +47,6 @@ export default function LoginPage({ handoff, onSignup }) {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function logOut() {
-    setToken(null);
-    setLoggedIn(null);
-    setPassword("");
-  }
-
-  if (loggedIn) {
-    return (
-      <div className="auth-form" role="status">
-        <h1>You're logged in</h1>
-        <p className="lede">Signed in as {loggedIn.name}.</p>
-        <dl className="account">
-          <div><dt>Email</dt><dd>{loggedIn.email}</dd></div>
-          <div><dt>Phone</dt><dd>{loggedIn.phone}</dd></div>
-        </dl>
-        <button className="btn-secondary" type="button" onClick={logOut}>Log out</button>
-      </div>
-    );
   }
 
   return (

@@ -2,28 +2,41 @@ import { useEffect, useState } from "react";
 import AuthLayout from "./components/AuthLayout.jsx";
 import SignupPage from "./components/SignupPage.jsx";
 import LoginPage from "./components/LoginPage.jsx";
+import ChatApp from "./chat/ChatApp.jsx";
+import { clearSession, getToken, getUser } from "./api.js";
 
-const ROUTES = ["signup", "login"];
+const AUTH_ROUTES = ["signup", "login"];
 
-function currentRoute() {
-  const r = window.location.hash.replace(/^#\/?/, "");
-  return ROUTES.includes(r) ? r : "signup";
+// #/signup, #/login, #/chat, #/chat/<id>
+function readHash() {
+  const [route, id] = window.location.hash.replace(/^#\/?/, "").split("/");
+  if (route === "chat") return { route, id: id ? decodeURIComponent(id) : null };
+  if (AUTH_ROUTES.includes(route)) return { route, id: null };
+  return { route: getToken() && getUser() ? "chat" : "signup", id: null };
 }
 
 export default function App() {
-  const [route, setRoute] = useState(currentRoute);
+  const [{ route, id }, setLocation] = useState(readHash);
+  const [user, setUser] = useState(getUser);
   const [typedName, setTypedName] = useState("");
-  // Carries the new account's email and a message from sign-up to the login page.
   const [handoff, setHandoff] = useState(null);
 
+  const signedIn = Boolean(user && getToken());
+
   useEffect(() => {
-    const onHash = () => setRoute(currentRoute());
+    const onHash = () => setLocation(readHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
+  // Chats need a session.
   useEffect(() => {
-    document.title = route === "login" ? "Log in · Chorus" : "Create account · Chorus";
+    if (route === "chat" && !signedIn) window.location.replace("#/login");
+  }, [route, signedIn]);
+
+  useEffect(() => {
+    if (route === "login") document.title = "Log in · Chorus";
+    else if (route === "signup") document.title = "Create account · Chorus";
   }, [route]);
 
   function go(next, data = null) {
@@ -31,12 +44,29 @@ export default function App() {
     window.location.hash = `/${next}`;
   }
 
+  function logOut() {
+    clearSession();
+    setUser(null);
+    go("login");
+  }
+
+  if (route === "chat") {
+    return signedIn ? <ChatApp user={user} activeId={id} onLogout={logOut} /> : null;
+  }
+
   return (
     <AuthLayout mode={route} name={typedName}>
       {route === "signup" ? (
-        <SignupPage onNameChange={setTypedName} onCreated={(user) => go("login", { identifier: user.email, name: user.name })} onLogin={() => go("login")} />
+        <SignupPage onNameChange={setTypedName} onCreated={(u) => go("login", { identifier: u.email, name: u.name })} onLogin={() => go("login")} />
       ) : (
-        <LoginPage handoff={handoff} onSignup={() => go("signup")} />
+        <LoginPage
+          handoff={handoff}
+          onSignup={() => go("signup")}
+          onLoggedIn={(u) => {
+            setUser(u);
+            go("chat");
+          }}
+        />
       )}
     </AuthLayout>
   );

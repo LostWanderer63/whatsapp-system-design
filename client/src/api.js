@@ -1,4 +1,5 @@
 const TOKEN_KEY = "chorus.token";
+const USER_KEY = "chorus.user";
 
 export function getToken() {
   try {
@@ -17,7 +18,32 @@ export function setToken(token) {
   }
 }
 
-/** Error from the API, with per-field messages when the server sent them. */
+export function getUser() {
+  try {
+    return JSON.parse(localStorage.getItem(USER_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSession(token, user) {
+  setToken(token);
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    /* see setToken */
+  }
+}
+
+export function clearSession() {
+  setToken(null);
+  try {
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    /* see setToken */
+  }
+}
+
 export class ApiError extends Error {
   constructor(message, status, fields = {}) {
     super(message);

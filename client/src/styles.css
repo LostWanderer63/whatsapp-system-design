@@ -434,38 +434,6 @@ a:hover {
   background: var(--success-bg);
 }
 
-/* logged-in confirmation */
-
-.account {
-  margin: 0 0 24px;
-  padding: 4px 16px;
-  background: var(--white);
-  border: 1.5px solid var(--line);
-  border-radius: 14px;
-}
-
-.account div {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
-}
-
-.account div + div {
-  border-top: 1px solid var(--line);
-}
-
-.account dt {
-  color: var(--ink-soft);
-}
-
-.account dd {
-  margin: 0;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-  text-align: right;
-}
-
 /* ---------- responsive ---------- */
 
 @media (max-width: 880px) {
