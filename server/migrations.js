@@ -66,9 +66,17 @@ async function allowSharedConversations() {
   if (rows[0]?.nullable === "NO") await sequelize.query("ALTER TABLE conversations MODIFY created_by INT NULL");
 }
 
+async function addDirectKey() {
+  if (await columnType("conversations", "direct_key")) return;
+  await sequelize.query(
+    "ALTER TABLE conversations ADD COLUMN direct_key VARCHAR(32) NULL, ADD UNIQUE INDEX conversations_direct_key (direct_key)"
+  );
+}
+
 async function runMigrations() {
   await linkMessagesToConversations();
   await allowSharedConversations();
+  await addDirectKey();
 }
 
 module.exports = { runMigrations };

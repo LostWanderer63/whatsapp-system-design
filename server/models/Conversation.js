@@ -9,6 +9,7 @@ const Conversation = sequelize.define(
     kind: { type: DataTypes.ENUM("direct", "group"), allowNull: false, defaultValue: "group" },
     title: { type: DataTypes.STRING(100), allowNull: false },
     clientKey: { type: DataTypes.STRING(64), allowNull: true, field: "client_key" },
+    directKey: { type: DataTypes.STRING(32), allowNull: true, unique: "conversations_direct_key", field: "direct_key" },
   },
   {
     tableName: "conversations",
@@ -31,6 +32,8 @@ Conversation.prototype.toPublic = function toPublic() {
 };
 
 Conversation.LOUNGE_KEY = "lounge";
+
+Conversation.directKeyFor = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);
 
 Conversation.findLounge = () => Conversation.findOne({ where: { clientKey: Conversation.LOUNGE_KEY, createdBy: null } });
 

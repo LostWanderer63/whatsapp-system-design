@@ -4,6 +4,7 @@ const config = require("../config");
 const { authenticate } = require("./middleware");
 const chat = require("./handlers/chat");
 const { registerPresenceHandlers } = require("./handlers/presence");
+const { registerPersonalChatHandlers } = require("./handlers/personalChat");
 
 let io = null;
 
@@ -12,7 +13,7 @@ function startSocketServer() {
   io = new Server(httpServer, {
     cors: { origin: config.socket.origins },
     serveClient: false,
-    maxHttpBufferSize: 8 * 1024,
+    maxHttpBufferSize: 32 * 1024,
   });
 
   io.use(authenticate);
@@ -20,6 +21,7 @@ function startSocketServer() {
   io.on("connection", (socket) => {
     chat.registerChatHandlers(io, socket);
     registerPresenceHandlers(io, socket);
+    registerPersonalChatHandlers(io, socket);
   });
 
   httpServer.on("error", (err) => {

@@ -47,10 +47,19 @@ The client connects with `socket.io-client`, passing the JWT in the handshake: `
 
 | Event (server → client) | When |
 |---|---|
-| `message` | a message was saved in a chat you're a member of (same shape as `GET /api/messages`) |
+| `new_message` | a message was saved in a chat you're a member of (same shape as `GET /api/messages`), whether it was sent over REST or the socket |
 | `presence` | `{ online }`: number of distinct users connected changed |
 
-Sending still goes through `POST /api/messages`, so validation, membership checks and retry-safety live in one place. Socket.IO handles reconnection; on every `connect` the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline. Set `VITE_SOCKET_URL` to point the frontend at a different Socket.IO server.
+#### Personal chats (client → server, with acknowledgement)
+
+| Event | Payload | Ack |
+|---|---|---|
+| `join_room` | `{ userId }` opens (or creates) your one-to-one chat with that user; `{ conversationId }` re-joins a chat you're in | `{ ok, conversation: { …, otherUser }, messages }` (last 50) or `{ ok: false, error }` |
+| `new_message` | `{ conversationId, text, clientId? }` | `{ ok, message }` or `{ ok: false, error }` |
+
+`join_room` puts the socket in the `conversation:<id>` room. `new_message` applies the same checks as `POST /api/messages` (validation, membership, `clientId` retry safety), stores the message, and emits `new_message` to the conversation room and to every member's `user:<id>` room, so the other person gets it even if they haven't opened the chat. There is exactly one personal chat per pair of users, enforced by `conversations.direct_key` (`"<lower id>:<higher id>"`, unique).
+
+`POST /api/messages` works too and emits the same event, so validation, membership checks and retry-safety stay consistent. Socket.IO handles reconnection; on every `connect` the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline. Set `VITE_SOCKET_URL` to point the frontend at a different Socket.IO server.
 
 Socket.IO code lives in `server/socket-io/`:
 
@@ -59,13 +68,14 @@ server/socket-io/
 ├── index.js          creates the server on SOCKET_PORT, applies middleware, registers handlers
 ├── middleware.js     authenticate: verifies the handshake JWT and loads the user
 └── handlers/
-    ├── chat.js       joins the user:<id> room; pushes saved messages to chat members
-    └── presence.js   tracks connected users and emits presence
+    ├── chat.js           joins the user:<id> room; pushes saved messages to chat members
+    ├── personalChat.js   join_room and new_message for one-to-one chats
+    └── presence.js       tracks connected users and emits presence
 ```
 
 ### Tables
 
-**`conversations`**: `id` BIGINT PK · `kind` (`direct`/`group`) · `title` · `created_by` → `users.id` · `client_key` (unique per creator; the app's demo chats use `trek`, `flat`, …) · `created_at`
+**`conversations`**: `id` BIGINT PK · `kind` (`direct`/`group`) · `title` · `created_by` → `users.id` (NULL for the shared lounge) · `client_key` (unique per creator; the app's demo chats use `trek`, `flat`, …) · `direct_key` (unique; one personal chat per pair of users) · `created_at`
 
 **`conversation_members`**: PK (`conversation_id` → `conversations.id`, `user_id` → `users.id`) · `role` (`owner`/`member`) · `joined_at`. Index on `user_id`. Every message read and write is checked against this table.
 

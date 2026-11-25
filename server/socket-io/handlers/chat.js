@@ -1,6 +1,7 @@
 const ConversationMember = require("../../models/ConversationMember");
 
 const userRoom = (userId) => `user:${userId}`;
+const conversationRoom = (conversationId) => `conversation:${conversationId}`;
 
 function registerChatHandlers(io, socket) {
   socket.join(userRoom(socket.data.userId));
@@ -8,8 +9,7 @@ function registerChatHandlers(io, socket) {
 
 async function publishMessage(io, message) {
   const members = await ConversationMember.findAll({ where: { conversationId: message.conversationId }, attributes: ["userId"] });
-  if (!members.length) return;
-  io.to(members.map((m) => userRoom(m.userId))).emit("message", message);
+  io.to([conversationRoom(message.conversationId), ...members.map((m) => userRoom(m.userId))]).emit("new_message", message);
 }
 
-module.exports = { registerChatHandlers, publishMessage, userRoom };
+module.exports = { registerChatHandlers, publishMessage, userRoom, conversationRoom };

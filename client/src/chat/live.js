@@ -30,7 +30,7 @@ export function connectLive({ getToken, onReady, onMessage, onPresence, onStatus
     onStatus("offline");
   });
 
-  socket.on("message", onMessage);
+  socket.on("new_message", onMessage);
   socket.on("presence", ({ online }) => onPresence(online));
 
   return () => socket.disconnect();
