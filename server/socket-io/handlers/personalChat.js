@@ -4,7 +4,8 @@ const User = require("../../models/User");
 const Conversation = require("../../models/Conversation");
 const ConversationMember = require("../../models/ConversationMember");
 const Message = require("../../models/Message");
-const { validateMessage, parseId, normalizeEmail } = require("../../validation");
+const { validateMessage, parseId } = require("../../validation");
+const { roomIdFor, otherEmailInRoom } = require("../roomId");
 const { conversationRoom, publishMessage } = require("./chat");
 
 const HISTORY_SIZE = 50;
@@ -43,9 +44,9 @@ async function findOrCreateDirect(meId, otherId) {
 async function otherMember(conversationId, meId) {
   const row = await ConversationMember.findOne({
     where: { conversationId, userId: { [Op.ne]: meId } },
-    include: [{ model: User, attributes: ["id", "name"] }],
+    include: [{ model: User, attributes: ["id", "name", "email"] }],
   });
-  return row?.User ? { id: row.User.id, name: row.User.name } : null;
+  return row?.User || null;
 }
 
 async function recentMessages(conversationId) {
@@ -58,46 +59,56 @@ async function recentMessages(conversationId) {
   return rows.reverse().map((m) => m.toPublic());
 }
 
-async function findOther(body) {
-  if (body.email !== undefined) {
-    const email = normalizeEmail(body.email);
-    if (!email.includes("@")) return { error: "Enter an email address." };
-    const user = await User.findOne({ where: { email }, attributes: ["id", "name"] });
+const SELF_CHAT = "You can't start a personal chat with yourself.";
+
+async function findOther(me, body) {
+  if (body.roomId !== undefined) {
+    const otherEmail = otherEmailInRoom(body.roomId, me.email);
+    if (!otherEmail) return { error: "You aren't part of that room." };
+    if (otherEmail === me.email.toLowerCase()) return { error: SELF_CHAT };
+    const user = await User.findOne({ where: { email: otherEmail }, attributes: ["id", "name", "email"] });
     return user ? { user } : { error: "No Chorus account uses that email." };
   }
   const otherId = Number(body.userId);
   if (!Number.isInteger(otherId) || otherId <= 0) return { error: "userId must be a user id." };
-  const user = await User.findByPk(otherId, { attributes: ["id", "name"] });
+  const user = await User.findByPk(otherId, { attributes: ["id", "name", "email"] });
   return user ? { user } : { error: "User not found." };
 }
 
-async function openConversation(meId, body) {
-  if (body.email !== undefined || body.userId !== undefined) {
-    const { error, user } = await findOther(body);
+async function openConversation(me, body) {
+  if (body.roomId !== undefined || body.userId !== undefined) {
+    const { error, user } = await findOther(me, body);
     if (error) return { error };
-    if (user.id === meId) return { error: "You can't start a personal chat with yourself." };
-    return { conversation: await findOrCreateDirect(meId, user.id), otherUser: { id: user.id, name: user.name } };
+    if (user.id === me.id) return { error: SELF_CHAT };
+    return { conversation: await findOrCreateDirect(me.id, user.id), other: user };
   }
 
   const conversationId = parseId(body.conversationId);
-  if (!conversationId || !(await ConversationMember.isMember(conversationId, meId))) return { error: "Chat not found." };
+  if (!conversationId || !(await ConversationMember.isMember(conversationId, me.id))) return { error: "Chat not found." };
   const conversation = await Conversation.findByPk(conversationId);
   if (!conversation) return { error: "Chat not found." };
-  const otherUser = conversation.kind === "direct" ? await otherMember(conversation.id, meId) : null;
-  return { conversation, otherUser };
+  const other = conversation.directKey ? await otherMember(conversation.id, me.id) : null;
+  return { conversation, other };
 }
 
 function registerPersonalChatHandlers(io, socket) {
   const meId = socket.data.userId;
+  const me = { id: meId, email: socket.data.email };
 
   socket.on("join_room", async (payload, ack) => {
     try {
-      const { error, conversation, otherUser } = await openConversation(meId, asObject(payload));
+      const { error, conversation, other } = await openConversation(me, asObject(payload));
       if (error) return reply(ack, { ok: false, error });
-      await socket.join(conversationRoom(conversation.id));
+      const roomId = other ? roomIdFor(me.email, other.email) : null;
+      await socket.join(roomId ? [conversationRoom(conversation.id), roomId] : conversationRoom(conversation.id));
       return reply(ack, {
         ok: true,
-        conversation: { ...conversation.toPublic(), otherUser },
+        roomId,
+        conversation: {
+          ...conversation.toPublic(),
+          roomId,
+          otherUser: other ? { id: other.id, name: other.name } : null,
+        },
         messages: await recentMessages(conversation.id),
       });
     } catch (err) {

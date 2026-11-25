@@ -8,10 +8,11 @@ async function authenticate(socket, next) {
     if (typeof token !== "string") throw new Error("missing token");
     const { userId } = jwt.verify(token, config.jwt.secret, { algorithms: ["HS256"] });
     if (!Number.isInteger(userId)) throw new Error("bad payload");
-    const user = await User.findByPk(userId, { attributes: ["id", "name"] });
+    const user = await User.findByPk(userId, { attributes: ["id", "name", "email"] });
     if (!user) throw new Error("unknown user");
     socket.data.userId = user.id;
     socket.data.name = user.name;
+    socket.data.email = user.email;
     next();
   } catch {
     next(new Error("Unauthorized"));

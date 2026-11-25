@@ -4,6 +4,7 @@ import ConversationView from "./ConversationView.jsx";
 import { INCOMING, ME, PEOPLE, REPLIES, firstName, nextId, rememberPerson, seedConversations } from "./data.js";
 import { getToken, request } from "../api.js";
 import { connectLive } from "./live.js";
+import { normalizeEmail, roomIdFor } from "./roomId.js";
 import "./chat.css";
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
@@ -33,6 +34,7 @@ function personalConvo(conversation, otherUser) {
     kind: "direct",
     personal: true,
     serverId: conversation.id,
+    roomId: conversation.roomId,
     title: otherUser.name,
     tone: PEOPLE[from].tone,
     members: [from],
@@ -227,7 +229,9 @@ export default function ChatApp({ user, activeId, onLogout }) {
       onPresence: setOnline,
       onMessage: onLiveMessage,
       onReady: () => {
-        convosRef.current.filter((c) => c.personal).forEach((c) => joinRoom({ conversationId: c.serverId }).catch(() => {}));
+        convosRef.current
+          .filter((c) => c.personal)
+          .forEach((c) => joinRoom(c.roomId ? { roomId: c.roomId } : { conversationId: c.serverId }).catch(() => {}));
         fetchSince(lastId.current || null)
           .then((missed) => applyIncoming(missed, { countUnread: true }))
           .catch(() => {});
@@ -242,8 +246,12 @@ export default function ChatApp({ user, activeId, onLogout }) {
   }, [isReady, applyIncoming, fetchSince, joinRoom, onLiveMessage]);
 
   async function startChat(email) {
+    const theirEmail = normalizeEmail(email);
+    if (theirEmail === normalizeEmail(user.email)) throw new Error("You can't start a personal chat with yourself.");
     if (!liveRef.current) throw new Error("Still connecting. Try again in a moment.");
-    const { conversation } = await joinRoom({ email });
+    await request(`/users/lookup?email=${encodeURIComponent(theirEmail)}`, { auth: true });
+    const roomId = roomIdFor(user.email, theirEmail);
+    const { conversation } = await joinRoom({ roomId });
     window.location.hash = `/chat/${keyByServerId.current.get(conversation.id)}`;
   }
 

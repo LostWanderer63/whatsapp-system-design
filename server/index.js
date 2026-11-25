@@ -14,6 +14,7 @@ const { startSocketServer } = require("./socket-io");
 const authRoutes = require("./routes/auth");
 const messageRoutes = require("./routes/messages");
 const conversationRoutes = require("./routes/conversations");
+const userRoutes = require("./routes/users");
 
 const app = express();
 app.disable("x-powered-by");
@@ -21,6 +22,7 @@ app.use(express.json({ limit: "32kb" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/conversations", conversationRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api", (req, res) => res.status(404).json({ message: "Route not found." }));
 

@@ -7,6 +7,7 @@ const ConversationMember = require("../models/ConversationMember");
 const Message = require("../models/Message");
 const { requireAuth } = require("../middleware/auth");
 const { validateConversation, parseId } = require("../validation");
+const { roomIdFor } = require("../socket-io/roomId");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -19,19 +20,27 @@ router.get("/", async (req, res, next) => {
       include: [{ model: ConversationMember, as: "members", where: { userId: req.userId }, attributes: [] }],
       order: [["id", "ASC"]],
     });
-    const directIds = conversations.filter((c) => c.kind === "direct").map((c) => c.id);
-    const others = directIds.length
-      ? await ConversationMember.findAll({
-          where: { conversationId: directIds, userId: { [Op.ne]: req.userId } },
-          include: [{ model: User, attributes: ["id", "name"] }],
-        })
-      : [];
-    const otherByConversation = new Map(others.map((m) => [String(m.conversationId), m.User && { id: m.User.id, name: m.User.name }]));
+    const personalIds = conversations.filter((c) => c.directKey).map((c) => c.id);
+    const [me, others] = personalIds.length
+      ? await Promise.all([
+          User.findByPk(req.userId, { attributes: ["email"] }),
+          ConversationMember.findAll({
+            where: { conversationId: personalIds, userId: { [Op.ne]: req.userId } },
+            include: [{ model: User, attributes: ["id", "name", "email"] }],
+          }),
+        ])
+      : [null, []];
+    const otherByConversation = new Map(others.filter((m) => m.User).map((m) => [String(m.conversationId), m.User]));
     return res.json({
-      conversations: conversations.map((c) => ({
-        ...c.toPublic(),
-        ...(c.kind === "direct" ? { otherUser: otherByConversation.get(String(c.id)) || null } : {}),
-      })),
+      conversations: conversations.map((c) => {
+        const other = otherByConversation.get(String(c.id));
+        if (!c.directKey) return c.toPublic();
+        return {
+          ...c.toPublic(),
+          roomId: other && me ? roomIdFor(me.email, other.email) : null,
+          otherUser: other ? { id: other.id, name: other.name } : null,
+        };
+      }),
     });
   } catch (err) {
     return next(err);

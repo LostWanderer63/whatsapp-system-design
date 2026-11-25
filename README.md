@@ -31,6 +31,7 @@ npm start       # builds the React app and serves everything on http://localhost
 | POST | `/api/auth/signup` | `{ name, email, phone, password }` |
 | POST | `/api/auth/login` | `{ identifier, password }` (identifier = email or phone) |
 | POST | `/api/conversations/lounge/join` | — joins the shared Chorus Lounge everyone can talk in |
+| GET | `/api/users/lookup?email=` | — `{ user: { id, name, email } }` if an account uses that email, else 404 |
 | GET | `/api/conversations` | — lists the chats you're a member of |
 | POST | `/api/conversations` | `{ title, kind?, clientKey? }` — creates a chat you own; an existing `clientKey` returns that chat |
 | GET | `/api/conversations/:id/messages?before=&limit=` | — members only; oldest-first page, `hasMore` for older pages |
@@ -54,12 +55,14 @@ The client connects with `socket.io-client`, passing the JWT in the handshake: `
 
 | Event | Payload | Ack |
 |---|---|---|
-| `join_room` | `{ email }` or `{ userId }` opens (or creates) your one-to-one chat with that user; `{ conversationId }` re-joins a chat you're in | `{ ok, conversation: { …, otherUser }, messages }` (last 50) or `{ ok: false, error }` |
+| `join_room` | `{ roomId }` or `{ userId }` opens (or creates) your one-to-one chat with that user; `{ conversationId }` re-joins a chat you're in | `{ ok, conversation: { …, otherUser }, messages }` (last 50) or `{ ok: false, error }` |
 | `new_message` | `{ conversationId, text, clientId? }` | `{ ok, message }` or `{ ok: false, error }` |
 
-`join_room` puts the socket in the `conversation:<id>` room. `new_message` applies the same checks as `POST /api/messages` (validation, membership, `clientId` retry safety), stores the message, and emits `new_message` to the conversation room and to every member's `user:<id>` room, so the other person gets it even if they haven't opened the chat. There is exactly one personal chat per pair of users, enforced by `conversations.direct_key` (`"<lower id>:<higher id>"`, unique).
+**Room IDs.** A personal chat's room ID is built from both users' emails, lowercased and sorted alphabetically: `roomIdFor("bob@example.com", "alice@example.com")` → `dm:alice@example.com|bob@example.com`, the same whoever starts the chat. The function is in `client/src/chat/roomId.js` and `server/socket-io/roomId.js`. The server never trusts a room ID as sent: it only accepts one that contains the caller's own email and matches the sorted form exactly, so nobody can join a room between two other people.
 
-In the app, typing a full email into the sidebar search shows **Start a chat**; it emits `join_room({ email })` and opens the chat. Messages are sent with `socket.emit("new_message", …)` (falling back to `POST /api/messages` while the socket is reconnecting) and received through the `new_message` listener. After every (re)connect the client emits `join_room({ conversationId })` for each personal chat, since rooms don't survive a reconnect. A chat someone else starts with you shows up as soon as their first message arrives.
+`join_room` puts the socket in the room ID and in `conversation:<id>`. `new_message` applies the same checks as `POST /api/messages` (validation, membership, `clientId` retry safety), stores the message, and emits `new_message` to the conversation room and to every member's `user:<id>` room, so the other person gets it even if they haven't opened the chat. There is exactly one personal chat per pair of users, enforced by `conversations.direct_key` (`"<lower id>:<higher id>"`, unique).
+
+In the app, typing a full email into the sidebar search shows **Start a chat**. The client checks the email against `GET /api/users/lookup` first (so made-up addresses stop there), builds the room ID, emits `join_room({ roomId })` and opens the chat. Messages are sent with `socket.emit("new_message", …)` (falling back to `POST /api/messages` while the socket is reconnecting) and received through the `new_message` listener. After every (re)connect the client emits `join_room({ roomId })` for each personal chat, since rooms don't survive a reconnect. A chat someone else starts with you shows up as soon as their first message arrives.
 
 `POST /api/messages` works too and emits the same event, so validation, membership checks and retry-safety stay consistent. Socket.IO handles reconnection; on every `connect` the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline. Set `VITE_SOCKET_URL` to point the frontend at a different Socket.IO server.
 
