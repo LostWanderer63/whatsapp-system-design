@@ -10,7 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const { initDB } = require("./db");
-const { startRealtime } = require("./realtime");
+const { startSocketServer } = require("./socket-io");
 const authRoutes = require("./routes/auth");
 const messageRoutes = require("./routes/messages");
 const conversationRoutes = require("./routes/conversations");
@@ -40,7 +40,7 @@ app.use((err, req, res, next) => {
 initDB()
   .then(() => {
     app.listen(config.port, () => console.log(`API running on http://localhost:${config.port}`));
-    startRealtime();
+    startSocketServer();
   })
   .catch((err) => {
     console.error("Could not connect to MySQL:", err.message);

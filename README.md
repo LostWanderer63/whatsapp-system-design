@@ -52,6 +52,17 @@ The client connects with `socket.io-client`, passing the JWT in the handshake: `
 
 Sending still goes through `POST /api/messages`, so validation, membership checks and retry-safety live in one place. Socket.IO handles reconnection; on every `connect` the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline. Set `VITE_SOCKET_URL` to point the frontend at a different Socket.IO server.
 
+Socket.IO code lives in `server/socket-io/`:
+
+```
+server/socket-io/
+├── index.js          creates the server on SOCKET_PORT, applies middleware, registers handlers
+├── middleware.js     authenticate: verifies the handshake JWT and loads the user
+└── handlers/
+    ├── chat.js       joins the user:<id> room; pushes saved messages to chat members
+    └── presence.js   tracks connected users and emits presence
+```
+
 ### Tables
 
 **`conversations`**: `id` BIGINT PK · `kind` (`direct`/`group`) · `title` · `created_by` → `users.id` · `client_key` (unique per creator; the app's demo chats use `trek`, `flat`, …) · `created_at`

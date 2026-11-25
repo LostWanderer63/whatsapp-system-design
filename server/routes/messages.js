@@ -5,7 +5,7 @@ const User = require("../models/User");
 const Message = require("../models/Message");
 const ConversationMember = require("../models/ConversationMember");
 const { requireAuth } = require("../middleware/auth");
-const { publishMessage } = require("../realtime");
+const { publishMessage } = require("../socket-io");
 const { validateMessage, parseId } = require("../validation");
 
 const router = express.Router();
