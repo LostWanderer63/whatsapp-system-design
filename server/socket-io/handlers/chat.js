@@ -2,6 +2,7 @@ const { UniqueConstraintError } = require("sequelize");
 const ConversationMember = require("../../models/ConversationMember");
 const Message = require("../../models/Message");
 const { validateMessage } = require("../../validation");
+const { withMediaUrls } = require("../../services/media");
 const EVENTS = require("../events");
 const { userRoom, conversationRoom } = require("../rooms");
 const { ClientError, withAck } = require("../utils");
@@ -33,7 +34,8 @@ function registerChatHandlers(io, socket) {
       } catch (err) {
         if (!(err instanceof UniqueConstraintError && values.clientId)) throw err;
         const existing = await Message.findOne({ where: { senderId: userId, clientId: values.clientId } });
-        return { message: { ...existing.toPublic(), senderName: name } };
+        const [message] = await withMediaUrls([{ ...existing.toPublic(), senderName: name }]);
+        return { message };
       }
     })
   );

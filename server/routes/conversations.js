@@ -8,6 +8,7 @@ const Message = require("../models/Message");
 const { requireAuth } = require("../middleware/auth");
 const { validateConversation, parseId } = require("../validation");
 const { describeConversations } = require("../services/conversations");
+const { serializeMessages } = require("../services/media");
 const { addUserToConversation } = require("../socket-io");
 
 const router = express.Router();
@@ -93,7 +94,7 @@ router.get("/:id/messages", async (req, res, next) => {
     });
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit).reverse();
-    return res.json({ messages: page.map((m) => m.toPublic()), hasMore });
+    return res.json({ messages: await serializeMessages(page), hasMore });
   } catch (err) {
     return next(err);
   }

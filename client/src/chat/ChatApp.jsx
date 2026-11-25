@@ -3,7 +3,8 @@ import ConversationList from "./ConversationList.jsx";
 import ConversationView from "./ConversationView.jsx";
 import GroupDialog from "./GroupDialog.jsx";
 import { INCOMING, ME, PEOPLE, REPLIES, firstName, nextId, rememberPerson, seedConversations, toneFor } from "./data.js";
-import { getToken, request } from "../api.js";
+import { getToken, request, uploadFile } from "../api.js";
+import { kindFromType } from "./media.js";
 import { createChatSocket } from "./socket.js";
 import { EVENTS } from "./events.js";
 import { normalizeEmail, roomIdFor } from "./roomId.js";
@@ -22,6 +23,7 @@ function mergeHistory(convo, stored, userId) {
       serverId: s.id,
       from: s.senderId === userId ? ME : rememberPerson(s.senderId, s.senderName),
       text: s.text,
+      attachment: s.attachment || null,
       at: Date.parse(s.createdAt),
       ...(s.senderId === userId ? { status: "sent" } : {}),
     }));
@@ -69,6 +71,7 @@ export default function ChatApp({ user, activeId, onLogout }) {
   const [liveStatus, setLiveStatus] = useState("connecting");
   const [online, setOnline] = useState(null);
   const [groupDialog, setGroupDialog] = useState(null);
+  const [media, setMedia] = useState(null);
 
   const active = convos.find((c) => c.id === activeId) || null;
 
@@ -224,6 +227,9 @@ export default function ChatApp({ user, activeId, onLogout }) {
     const run = ++loadRun.current;
     setSync("loading");
     try {
+      request("/media/config", { auth: true })
+        .then(setMedia)
+        .catch(() => setMedia({ enabled: false, maxBytes: 0, types: [] }));
       await syncConversations();
       await Promise.all(convosRef.current.map((c) => ensureConversation(c)));
       const all = await fetchSince(null);
@@ -356,11 +362,54 @@ export default function ChatApp({ user, activeId, onLogout }) {
     save(convoId, msg);
   }
 
+  function sendMedia(convoId, file, caption) {
+    const msg = {
+      id: newClientId(),
+      from: ME,
+      text: caption,
+      at: Date.now(),
+      status: "sending",
+      progress: 0,
+      file,
+      attachment: { name: file.name, type: file.type, size: file.size, kind: kindFromType(file.type), url: URL.createObjectURL(file), local: true },
+    };
+    update(convoId, (c) => ({ ...c, messages: [...c.messages, msg] }));
+    setDrafts((d) => ({ ...d, [convoId]: "" }));
+    upload(convoId, msg);
+  }
+
+  async function upload(convoId, msg) {
+    let shown = 0;
+    try {
+      const conversationId = await ensureConversation(convosRef.current.find((c) => c.id === convoId));
+      const form = new FormData();
+      form.append("conversationId", conversationId);
+      form.append("clientId", msg.id);
+      form.append("caption", msg.text);
+      form.append("file", msg.file);
+      const { message } = await uploadFile("/media", form, {
+        onProgress: (p) => {
+          if (p - shown < 0.02 && p < 1) return;
+          shown = p;
+          patchMessage(convoId, msg.id, (m) => ({ ...m, progress: p }));
+        },
+      });
+      lastId.current = Math.max(lastId.current, Number(message.id));
+      patchMessage(convoId, msg.id, (m) => {
+        if (m.attachment?.local) URL.revokeObjectURL(m.attachment.url);
+        return { ...m, status: "sent", serverId: message.id, attachment: message.attachment, progress: undefined, file: undefined };
+      });
+    } catch (err) {
+      patchMessage(convoId, msg.id, (m) => ({ ...m, status: "failed", error: err.message || "Upload failed." }));
+    }
+  }
+
   function retry(convoId, id) {
     const msg = convosRef.current.find((c) => c.id === convoId)?.messages.find((m) => m.id === id);
     if (!msg || msg.status !== "failed") return;
-    patchMessage(convoId, id, (m) => ({ ...m, status: "sending", error: undefined }));
-    save(convoId, msg);
+    patchMessage(convoId, id, (m) => ({ ...m, status: "sending", error: undefined, progress: m.file ? 0 : undefined }));
+    if (msg.file) upload(convoId, msg);
+    else save(convoId, msg);
   }
 
   async function save(convoId, msg) {
@@ -429,6 +478,8 @@ export default function ChatApp({ user, activeId, onLogout }) {
             draft={drafts[active.id] || ""}
             onDraft={(text) => setDrafts((d) => ({ ...d, [active.id]: text }))}
             onSend={(text) => send(active.id, text)}
+            onSendMedia={(file, caption) => sendMedia(active.id, file, caption)}
+            media={media}
             onRetry={(id) => retry(active.id, id)}
             onLeaveGroup={() => leaveGroup(active.id)}
             meId={user.id}

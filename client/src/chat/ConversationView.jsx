@@ -100,7 +100,7 @@ function GroupInfo({ convo, meId, onLeave, onClose }) {
   );
 }
 
-export default function ConversationView({ convo, meId, dividerId, draft, onDraft, onSend, onRetry, onLeaveGroup, presence }) {
+export default function ConversationView({ convo, meId, dividerId, draft, onDraft, onSend, onSendMedia, media, onRetry, onLeaveGroup, presence }) {
   const [showInfo, setShowInfo] = useState(false);
 
   return (
@@ -137,7 +137,15 @@ export default function ConversationView({ convo, meId, dividerId, draft, onDraf
 
       <MessageList convo={convo} dividerId={dividerId} onRetry={onRetry} />
 
-      <Composer key={convo.id} value={draft} onChange={onDraft} onSend={onSend} placeholder={`Message ${convo.kind === "group" ? convo.title : firstName(convo.title)}`} />
+      <Composer
+        key={convo.id}
+        value={draft}
+        onChange={onDraft}
+        onSend={onSend}
+        onSendMedia={onSendMedia}
+        media={media}
+        placeholder={`Message ${convo.kind === "group" ? convo.title : firstName(convo.title)}`}
+      />
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Avatar } from "./bits.jsx";
 import { ME, PEOPLE, firstName } from "./data.js";
 import { listStamp } from "./time.js";
+import { attachmentLabel } from "./media.js";
 
 function preview(c, draft) {
   if (c.typing) return { kind: "typing", text: c.kind === "group" ? `${firstName(PEOPLE[c.typing].name)} is typing…` : "typing…" };
@@ -10,7 +11,8 @@ function preview(c, draft) {
   if (!last) return { kind: "plain", text: c.live ? "Say hi to everyone 👋" : c.group ? "New group" : "" };
   if (last.system) return { kind: "plain", text: last.text };
   const who = last.from === ME ? "You" : c.kind === "group" ? firstName(PEOPLE[last.from].name) : "";
-  return { kind: "plain", who, text: last.text.replace(/\s+/g, " ") };
+  const text = last.attachment ? [attachmentLabel(last.attachment), last.text].filter(Boolean).join(" · ") : last.text;
+  return { kind: "plain", who, text: text.replace(/\s+/g, " ") };
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;

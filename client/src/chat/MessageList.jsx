@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ArrowDown, Avatar, Ticks } from "./bits.jsx";
 import { ME, PEOPLE, firstName } from "./data.js";
 import { clock, dayLabel, fullStamp, startOfDay } from "./time.js";
+import { formatSize } from "./media.js";
 
 const GROUP_GAP = 5 * 60_000;
 const NEAR_BOTTOM = 96;
@@ -15,6 +16,66 @@ function isJumbo(text) {
   if (!JUMBO.test(text)) return false;
   const count = [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text.trim())].filter((s) => s.segment.trim()).length;
   return count <= 3;
+}
+
+function UploadProgress({ value }) {
+  return (
+    <span className="att-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((value || 0) * 100)}>
+      <span style={{ width: `${Math.round((value || 0) * 100)}%` }} />
+    </span>
+  );
+}
+
+function Attachment({ attachment: a, sending, progress }) {
+  const progressBar = sending && <UploadProgress value={progress} />;
+  if (!a.url) {
+    return (
+      <span className="att att-file is-missing">
+        <span className="att-file-icon" aria-hidden="true">📄</span>
+        <span className="att-file-text">
+          <strong>{a.name}</strong>
+          <small>File unavailable</small>
+        </span>
+      </span>
+    );
+  }
+  if (a.kind === "image") {
+    return (
+      <a className="att att-image" href={a.url} target="_blank" rel="noopener noreferrer" aria-label={`Open image ${a.name}`}>
+        <img src={a.url} alt={a.name} loading="lazy" />
+        {progressBar}
+      </a>
+    );
+  }
+  if (a.kind === "video") {
+    return (
+      <span className="att att-video">
+        <video src={a.url} controls preload="metadata" />
+        {progressBar}
+      </span>
+    );
+  }
+  if (a.kind === "audio") {
+    return (
+      <span className="att att-audio">
+        <audio src={a.url} controls preload="metadata" />
+        {progressBar}
+      </span>
+    );
+  }
+  const extension = a.name.includes(".") ? a.name.split(".").pop().toUpperCase() : "FILE";
+  return (
+    <a className="att att-file" href={a.url} target="_blank" rel="noopener noreferrer" download={a.name}>
+      <span className="att-file-icon" aria-hidden="true">{extension.slice(0, 4)}</span>
+      <span className="att-file-text">
+        <strong>{a.name}</strong>
+        <small>
+          {formatSize(a.size)} · {extension}
+        </small>
+      </span>
+      {progressBar}
+    </a>
+  );
 }
 
 function groupByDay(messages) {
@@ -95,6 +156,7 @@ export default function MessageList({ convo, dividerId, onRetry }) {
       if (following.current && !autoScrolling.current) el.scrollTop = el.scrollHeight;
     });
     ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
     return () => ro.disconnect();
   }, []);
 
@@ -149,7 +211,7 @@ export default function MessageList({ convo, dividerId, onRetry }) {
                   }
                   const mine = m.from === ME;
                   const person = PEOPLE[m.from];
-                  const jumbo = isJumbo(m.text);
+                  const jumbo = !m.attachment && isJumbo(m.text);
                   return [
                     m.id === dividerId && (
                       <li key="divider" ref={divider} className="unread-divider">
@@ -158,7 +220,7 @@ export default function MessageList({ convo, dividerId, onRetry }) {
                     ),
                     <li
                       key={m.id}
-                      className={`msg${mine ? " mine" : ""}${jumbo ? " jumbo" : ""}${m.status === "failed" ? " failed" : ""}${initialIds.current.has(m.id) ? "" : " pop"}`}
+                      className={`msg${mine ? " mine" : ""}${jumbo ? " jumbo" : ""}${m.attachment ? ` has-att kind-${m.attachment.kind}` : ""}${m.status === "failed" ? " failed" : ""}${initialIds.current.has(m.id) ? "" : " pop"}`}
                       data-first={first ? "" : undefined}
                       data-last={last ? "" : undefined}
                     >
@@ -167,7 +229,8 @@ export default function MessageList({ convo, dividerId, onRetry }) {
                         {!mine && isGroup && first && <span className={`msg-from ink-${person.tone}`}>{firstName(person.name)}</span>}
                         {!mine && isGroup && !first && <span className="sr-only">{firstName(person.name)}: </span>}
                         {mine && <span className="sr-only">You: </span>}
-                        <span className="msg-text">{m.text}</span>
+                        {m.attachment && <Attachment attachment={m.attachment} sending={m.status === "sending"} progress={m.progress} />}
+                        {m.text && <span className="msg-text">{m.text}</span>}
                         <span className="msg-meta">
                           <time dateTime={new Date(m.at).toISOString()}>{clock(m.at)}</time>
                           {mine && <Ticks status={m.status} />}

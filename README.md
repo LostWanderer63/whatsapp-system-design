@@ -31,6 +31,8 @@ npm start       # builds the React app and serves everything on http://localhost
 | POST | `/api/auth/signup` | `{ name, email, phone, password }` |
 | POST | `/api/auth/login` | `{ identifier, password }` (identifier = email or phone) |
 | POST | `/api/conversations/lounge/join` | — joins the shared Chorus Lounge everyone can talk in |
+| GET | `/api/media/config` | — `{ enabled, maxBytes, types }` |
+| POST | `/api/media` | multipart: `file`, `conversationId`, `caption?`, `clientId?` — members only; uploads to S3 and broadcasts the message |
 | GET | `/api/users/lookup?email=` | — `{ user: { id, name, email } }` if an account uses that email, else 404 |
 | GET | `/api/conversations` | — lists the chats you're a member of |
 | POST | `/api/conversations` | `{ title, kind?, clientKey? }` — creates a chat you own; an existing `clientKey` returns that chat |
@@ -104,13 +106,51 @@ server/socket-io/
     └── presence.js       online count
 ```
 
+### Media sharing (AWS S3)
+
+Photos, videos, audio, PDFs and office documents can be shared in any chat: use the paperclip in the message box, paste an image, or drop a file onto it. The browser uploads the file to `POST /api/media` (with a progress bar); the server checks the session, chat membership, file type and size, stores it in S3 with the AWS SDK, saves the message, and broadcasts `new_message` with the attachment to the chat's Socket.IO room.
+
+The bucket stays **private**. Attachment URLs are pre-signed S3 GET URLs, generated whenever messages are sent to a client and valid for `MEDIA_URL_TTL_SECONDS` (12 hours by default), so only people in the chat get working links. Files are stored as `media/<conversation id>/<random uuid>.<ext>`; the original name is kept in the database and used for downloads. HTML, SVG and other active content types are refused. To serve files from a public bucket or CloudFront instead, set `S3_PUBLIC_BASE_URL` and URLs become `<base>/<key>`.
+
+Without `S3_BUCKET` the server runs normally: `/api/media/config` reports `enabled: false`, uploads return 503, and the paperclip is hidden.
+
+#### AWS setup
+
+Requires the AWS CLI, signed in as an account that can create buckets and IAM users. Replace `YOUR_BUCKET_NAME` and the region.
+
+1. Create the bucket (Block Public Access stays on, which is what we want):
+   ```bash
+   aws s3api create-bucket --bucket YOUR_BUCKET_NAME --region ap-south-1 \
+     --create-bucket-configuration LocationConstraint=ap-south-1
+   ```
+2. Allow the frontend's origins ([aws/s3-cors.json](aws/s3-cors.json); add your production URL there):
+   ```bash
+   aws s3api put-bucket-cors --bucket YOUR_BUCKET_NAME --cors-configuration file://aws/s3-cors.json
+   ```
+3. Create an IAM user for the app with access to `media/*` only. Put your bucket name into [aws/iam-policy.json](aws/iam-policy.json) first. `s3:GetObject` is needed so the server can sign download links.
+   ```bash
+   aws iam create-user --user-name chorus-media
+   aws iam put-user-policy --user-name chorus-media --policy-name chorus-media-s3 \
+     --policy-document file://aws/iam-policy.json
+   aws iam create-access-key --user-name chorus-media
+   ```
+4. Put the values in `.env` (never commit it):
+   ```
+   AWS_REGION=ap-south-1
+   S3_BUCKET=YOUR_BUCKET_NAME
+   AWS_ACCESS_KEY_ID=...
+   AWS_SECRET_ACCESS_KEY=...
+   ```
+
+`MEDIA_MAX_MB` (default 25) caps file size. `S3_ENDPOINT` and `S3_FORCE_PATH_STYLE=true` point the SDK at an S3-compatible server such as MinIO or LocalStack for local development.
+
 ### Tables
 
 **`conversations`**: `id` BIGINT PK · `kind` (`direct`/`group`) · `title` · `created_by` → `users.id` (NULL for the shared lounge) · `client_key` (unique per creator; the app's demo chats use `trek`, `flat`, …) · `direct_key` (unique; one personal chat per pair of users) · `invite_code` (unique; set for group chats) · `created_at`
 
 **`conversation_members`**: PK (`conversation_id` → `conversations.id`, `user_id` → `users.id`) · `role` (`owner`/`member`) · `joined_at`. Index on `user_id`. Every message read and write is checked against this table.
 
-**`messages`**
+**`messages`** (attachments add `attachment_key`, `attachment_name`, `attachment_type`, `attachment_size`)
 
 | Column | Type | Notes |
 |---|---|---|

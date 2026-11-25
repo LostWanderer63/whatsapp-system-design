@@ -7,6 +7,7 @@ const ConversationMember = require("../models/ConversationMember");
 const { requireAuth } = require("../middleware/auth");
 const { publishMessage } = require("../socket-io");
 const { validateMessage, parseId } = require("../validation");
+const { serializeMessages, withMediaUrls } = require("../services/media");
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ router.get("/", requireAuth, async (req, res, next) => {
       limit: PAGE_SIZE + 1,
     });
     const hasMore = rows.length > PAGE_SIZE;
-    return res.json({ messages: rows.slice(0, PAGE_SIZE).map((m) => m.toPublic()), hasMore });
+    return res.json({ messages: await serializeMessages(rows.slice(0, PAGE_SIZE)), hasMore });
   } catch (err) {
     return next(err);
   }
@@ -53,7 +54,7 @@ router.post("/", requireAuth, async (req, res, next) => {
   } catch (err) {
     if (err instanceof UniqueConstraintError && values.clientId) {
       const existing = await Message.findOne({ where: { senderId: req.userId, clientId: values.clientId } }).catch(() => null);
-      if (existing) return res.status(200).json({ message: existing.toPublic() });
+      if (existing) return res.status(200).json({ message: (await withMediaUrls([existing.toPublic()]))[0] });
     }
     if (err instanceof ForeignKeyConstraintError) return res.status(404).json({ message: "Chat not found." });
     return next(err);

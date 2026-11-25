@@ -80,11 +80,23 @@ async function addInviteCode() {
   );
 }
 
+async function addAttachmentColumns() {
+  if (!(await columnType("messages", "id")) || (await columnType("messages", "attachment_key"))) return;
+  await sequelize.query(
+    `ALTER TABLE messages
+       ADD COLUMN attachment_key VARCHAR(512) NULL,
+       ADD COLUMN attachment_name VARCHAR(255) NULL,
+       ADD COLUMN attachment_type VARCHAR(127) NULL,
+       ADD COLUMN attachment_size INT UNSIGNED NULL`
+  );
+}
+
 async function runMigrations() {
   await linkMessagesToConversations();
   await allowSharedConversations();
   await addDirectKey();
   await addInviteCode();
+  await addAttachmentColumns();
 }
 
 module.exports = { runMigrations };

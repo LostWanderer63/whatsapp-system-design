@@ -1249,3 +1249,228 @@
   color: var(--error);
   font-size: 0.9rem;
 }
+
+.attach {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin: 2px 0 2px -12px;
+  padding: 0;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.attach:hover {
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.composer.is-dragging .composer-field {
+  border-color: var(--focus);
+  border-style: dashed;
+  background: #f1f0ff;
+}
+
+.composer-error {
+  max-width: 796px;
+  margin: 0 auto 8px;
+  color: var(--error);
+  font-size: 0.85rem;
+}
+
+.pending-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 796px;
+  margin: 0 auto 8px;
+  padding: 8px 8px 8px 8px;
+  background: var(--white);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+}
+
+.pending-file img,
+.pending-file video,
+.pending-icon {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--paper);
+}
+
+.pending-icon {
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+}
+
+.pending-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pending-text strong,
+.pending-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-text small {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.pending-file .icon-btn {
+  color: var(--ink-soft);
+}
+
+.pending-file .icon-btn:hover {
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.msg.has-att .msg-bubble {
+  padding: 4px 4px 6px;
+}
+
+.msg.has-att .msg-text {
+  display: block;
+  padding: 6px 8px 0;
+}
+
+.msg.has-att .msg-meta {
+  margin-right: 6px;
+}
+
+.msg.has-att .msg-from {
+  padding: 4px 8px 4px;
+}
+
+.att {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 16px;
+  color: inherit;
+  font-weight: 400;
+  text-decoration: none;
+}
+
+.att-image img,
+.att-video video {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(320px, 62vw);
+  max-height: 360px;
+  min-width: 120px;
+  min-height: 80px;
+  object-fit: cover;
+  background: var(--paper);
+}
+
+.att-video video {
+  width: min(320px, 62vw);
+  background: #000;
+}
+
+.att-audio {
+  padding: 6px 4px 2px;
+}
+
+.att-audio audio {
+  display: block;
+  width: min(280px, 62vw);
+}
+
+.att-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+  max-width: min(320px, 62vw);
+  padding: 10px 12px;
+  background: rgba(33, 30, 91, 0.05);
+}
+
+.mine .att-file {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.att-file:hover {
+  color: inherit;
+  background: rgba(33, 30, 91, 0.09);
+}
+
+.mine .att-file:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.att-file-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--butter);
+  color: var(--night);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.att-file-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.att-file-text strong {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.att-file-text small {
+  opacity: 0.7;
+  font-size: 0.8rem;
+}
+
+.att.is-missing {
+  opacity: 0.7;
+}
+
+.att-progress {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.att-progress span {
+  display: block;
+  height: 100%;
+  background: var(--butter);
+  transition: width 120ms linear;
+}
+
+.msg.has-att.failed .att {
+  opacity: 0.6;
+}

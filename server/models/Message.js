@@ -2,6 +2,7 @@ const { DataTypes } = require("sequelize");
 const { sequelize } = require("../db");
 const User = require("./User");
 const Conversation = require("./Conversation");
+const { kindOf } = require("../mediaTypes");
 
 const Message = sequelize.define(
   "Message",
@@ -10,6 +11,10 @@ const Message = sequelize.define(
     conversationId: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false, field: "conversation_id" },
     body: { type: DataTypes.TEXT, allowNull: false },
     clientId: { type: DataTypes.STRING(64), allowNull: true, field: "client_id" },
+    attachmentKey: { type: DataTypes.STRING(512), allowNull: true, field: "attachment_key" },
+    attachmentName: { type: DataTypes.STRING(255), allowNull: true, field: "attachment_name" },
+    attachmentType: { type: DataTypes.STRING(127), allowNull: true, field: "attachment_type" },
+    attachmentSize: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true, field: "attachment_size" },
   },
   {
     tableName: "messages",
@@ -43,6 +48,9 @@ Message.prototype.toPublic = function toPublic() {
     senderName: this.sender?.name,
     text: this.body,
     clientId: this.clientId,
+    attachment: this.attachmentKey
+      ? { key: this.attachmentKey, name: this.attachmentName, type: this.attachmentType, size: this.attachmentSize, kind: kindOf(this.attachmentType) }
+      : null,
     createdAt: this.createdAt,
   };
 };

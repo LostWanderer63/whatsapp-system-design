@@ -6,6 +6,7 @@ const Conversation = require("../models/Conversation");
 const ConversationMember = require("../models/ConversationMember");
 const Message = require("../models/Message");
 const { roomIdFor } = require("../socket-io/roomId");
+const { serializeMessages } = require("./media");
 
 const HISTORY_SIZE = 50;
 const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -58,7 +59,7 @@ async function recentMessages(conversationId) {
     order: [["id", "DESC"]],
     limit: HISTORY_SIZE,
   });
-  return rows.reverse().map((m) => m.toPublic());
+  return serializeMessages(rows.reverse());
 }
 
 async function findOrCreateDirect(meId, otherId) {

@@ -68,3 +68,28 @@ export async function request(path, { method = "GET", body, auth = false } = {})
   if (!res.ok) throw new ApiError(data.message || `Request failed (${res.status}).`, res.status, data.errors || {});
   return data;
 }
+
+export function uploadFile(path, formData, { onProgress } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api${path}`);
+    xhr.setRequestHeader("Accept", "application/json");
+    const token = getToken();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new ApiError(data.message || `Upload failed (${xhr.status}).`, xhr.status, data.errors || {}));
+    };
+    xhr.onerror = () => reject(new ApiError("Can't reach the server. Check your connection and try again.", 0));
+    xhr.send(formData);
+  });
+}

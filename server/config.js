@@ -27,6 +27,15 @@ module.exports = {
       .map((o) => o.trim())
       .filter(Boolean),
   },
+  media: {
+    bucket: process.env.S3_BUCKET || "",
+    region: process.env.AWS_REGION || "us-east-1",
+    endpoint: process.env.S3_ENDPOINT || "",
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+    publicBaseUrl: (process.env.S3_PUBLIC_BASE_URL || "").replace(/\/+$/, ""),
+    maxBytes: (Number(process.env.MEDIA_MAX_MB) || 25) * 1024 * 1024,
+    urlTtlSeconds: Number(process.env.MEDIA_URL_TTL_SECONDS) || 12 * 60 * 60,
+  },
   bcryptRounds: Number(process.env.BCRYPT_SALT_ROUNDS) || 10,
   defaultCountryCode: (process.env.DEFAULT_COUNTRY_CODE || "91").replace(/\D/g, ""),
 };
