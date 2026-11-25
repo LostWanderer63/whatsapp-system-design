@@ -1,6 +1,7 @@
-// Demo conversations. There is no messages API yet, so everything here lives
-// in memory for the current tab. Times are written as "hours ago" so the
-// order and day labels stay correct whatever time the page is opened.
+// Demo conversations. Each one is backed by a real conversation on the server
+// (found or created by its key, e.g. "trek"), and messages you send there are
+// saved and loaded back. The scripted lines and replies below are not stored.
+// Times are written as "hours ago" so order and day labels stay correct.
 
 export const ME = "me";
 
@@ -11,6 +12,13 @@ export const PEOPLE = {
   arjun: { name: "Arjun Rao", tone: "coral" },
   zoya: { name: "Zoya Khan", tone: "sky" },
 };
+
+// Senders the server tells us about who aren't in the demo cast above.
+export function rememberPerson(userId, name) {
+  const key = `u${userId}`;
+  PEOPLE[key] ??= { name: name || "Someone", tone: "sky" };
+  return key;
+}
 
 export const firstName = (name) => name.trim().split(/\s+/)[0] || "";
 

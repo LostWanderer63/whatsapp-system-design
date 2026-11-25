@@ -47,6 +47,7 @@ export default function Composer({ value, onChange, onSend, placeholder }) {
           onKeyDown={onKeyDown}
           autoFocus={finePointer()}
           enterKeyHint="send"
+          maxLength={4000}
         />
         <button className="send" type="submit" disabled={!text} aria-label="Send message">
           <SendIcon />

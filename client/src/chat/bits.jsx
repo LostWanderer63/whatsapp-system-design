@@ -8,9 +8,20 @@ export function Avatar({ name, tone, size = 44 }) {
   );
 }
 
-const STATUS_LABEL = { sent: "Sent", delivered: "Delivered", read: "Read" };
+const STATUS_LABEL = { sending: "Sending", failed: "Not sent", sent: "Sent", delivered: "Delivered", read: "Read" };
 
 export function Ticks({ status }) {
+  if (status === "sending" || status === "failed") {
+    return (
+      <span className={`ticks ticks-${status}`}>
+        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.2" />
+          {status === "sending" ? <path d="M8 4.6V8l2.2 1.4" /> : <path d="M8 4.6v4M8 11.2v.1" />}
+        </svg>
+        <span className="sr-only">{STATUS_LABEL[status]}</span>
+      </span>
+    );
+  }
   return (
     <span className={`ticks ticks-${status}`}>
       <svg viewBox="0 0 18 12" width="16" height="11" aria-hidden="true">

@@ -12,7 +12,7 @@ function preview(c, draft) {
   return { kind: "plain", who, text: last.text.replace(/\s+/g, " ") };
 }
 
-export default function ConversationList({ convos, activeId, drafts, user, onLogout }) {
+export default function ConversationList({ convos, activeId, drafts, user, onLogout, syncError, onRetrySync }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
 
@@ -47,6 +47,15 @@ export default function ConversationList({ convos, activeId, drafts, user, onLog
         <label className="sr-only" htmlFor="chat-search">Search chats</label>
         <input id="chat-search" type="search" placeholder="Search chats and messages" value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" />
       </div>
+
+      {syncError && (
+        <div className="side-notice" role="alert">
+          <span>Saved messages didn't load. {syncError}</span>
+          <button type="button" onClick={onRetrySync}>
+            Try again
+          </button>
+        </div>
+      )}
 
       <nav className="convo-scroll" aria-label="Chats">
         {sorted.length === 0 ? (

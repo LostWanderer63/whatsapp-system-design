@@ -32,7 +32,7 @@ function groupByDay(messages) {
   return days;
 }
 
-export default function MessageList({ convo, dividerId }) {
+export default function MessageList({ convo, dividerId, onRetry }) {
   const scroller = useRef(null);
   const divider = useRef(null);
   const following = useRef(true); // are we pinned to the newest message?
@@ -157,7 +157,7 @@ export default function MessageList({ convo, dividerId }) {
                     ),
                     <li
                       key={m.id}
-                      className={`msg${mine ? " mine" : ""}${jumbo ? " jumbo" : ""}${initialIds.current.has(m.id) ? "" : " pop"}`}
+                      className={`msg${mine ? " mine" : ""}${jumbo ? " jumbo" : ""}${m.status === "failed" ? " failed" : ""}${initialIds.current.has(m.id) ? "" : " pop"}`}
                       data-first={first ? "" : undefined}
                       data-last={last ? "" : undefined}
                     >
@@ -172,6 +172,14 @@ export default function MessageList({ convo, dividerId }) {
                           {mine && <Ticks status={m.status} />}
                         </span>
                       </div>
+                      {m.status === "failed" && (
+                        <p className="msg-failed" role="alert">
+                          Not sent. {m.error}{" "}
+                          <button type="button" onClick={() => onRetry(m.id)}>
+                            Retry
+                          </button>
+                        </p>
+                      )}
                     </li>,
                   ];
                 })}

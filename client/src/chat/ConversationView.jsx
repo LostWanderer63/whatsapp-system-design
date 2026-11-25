@@ -11,7 +11,7 @@ function subtitle(convo) {
   return theirs ? lastSeen(theirs.at) : "";
 }
 
-export default function ConversationView({ convo, dividerId, draft, onDraft, onSend }) {
+export default function ConversationView({ convo, dividerId, draft, onDraft, onSend, onRetry }) {
   return (
     <>
       <header className="pane-head">
@@ -27,7 +27,7 @@ export default function ConversationView({ convo, dividerId, draft, onDraft, onS
         </div>
       </header>
 
-      <MessageList convo={convo} dividerId={dividerId} />
+      <MessageList convo={convo} dividerId={dividerId} onRetry={onRetry} />
 
       <Composer key={convo.id} value={draft} onChange={onDraft} onSend={onSend} placeholder={`Message ${convo.kind === "group" ? convo.title : firstName(convo.title)}`} />
     </>

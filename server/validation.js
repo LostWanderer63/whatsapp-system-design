@@ -55,4 +55,42 @@ function parseIdentifier(value) {
   return phone ? { type: "phone", value: phone } : null;
 }
 
-module.exports = { validateSignup, parseIdentifier, normalizePhone };
+const MAX_MESSAGE = 4000;
+const KEY_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** A BIGINT row id from a URL or body ("42" or 42), as a string; null if it isn't one. */
+function parseId(value) {
+  const raw = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  return /^[1-9]\d{0,18}$/.test(raw) ? raw : null;
+}
+
+function validateMessage(body) {
+  const errors = {};
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  const conversationId = parseId(body.conversationId);
+  const clientId = body.clientId == null ? null : String(body.clientId);
+
+  if (!text) errors.text = "Message can't be empty.";
+  else if ([...text].length > MAX_MESSAGE) errors.text = `Messages can be up to ${MAX_MESSAGE} characters.`;
+
+  if (!conversationId) errors.conversationId = "Pick a chat to send this message to.";
+  if (clientId !== null && !KEY_RE.test(clientId)) errors.clientId = "Invalid client id.";
+
+  return { errors, values: { conversationId, body: text, clientId } };
+}
+
+function validateConversation(body) {
+  const errors = {};
+  const title = String(body.title || "").trim().replace(/\s+/g, " ");
+  const kind = body.kind === undefined ? "group" : body.kind;
+  const clientKey = body.clientKey == null ? null : String(body.clientKey);
+
+  if (!title) errors.title = "Give the chat a name.";
+  else if ([...title].length > 100) errors.title = "Chat names can be up to 100 characters.";
+  if (kind !== "group" && kind !== "direct") errors.kind = "Kind must be \"group\" or \"direct\".";
+  if (clientKey !== null && !KEY_RE.test(clientKey)) errors.clientKey = "Invalid client key.";
+
+  return { errors, values: { title, kind, clientKey } };
+}
+
+module.exports = { validateSignup, parseIdentifier, normalizePhone, validateMessage, validateConversation, parseId, MAX_MESSAGE };
