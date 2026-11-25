@@ -22,12 +22,20 @@ const Conversation = sequelize.define(
 
 Conversation.belongsTo(User, {
   as: "creator",
-  foreignKey: { name: "createdBy", field: "created_by", allowNull: false },
+  foreignKey: { name: "createdBy", field: "created_by", allowNull: true },
   onDelete: "CASCADE",
 });
 
 Conversation.prototype.toPublic = function toPublic() {
   return { id: String(this.id), kind: this.kind, title: this.title, clientKey: this.clientKey, createdBy: this.createdBy, createdAt: this.createdAt };
 };
+
+Conversation.LOUNGE_KEY = "lounge";
+
+Conversation.findLounge = () => Conversation.findOne({ where: { clientKey: Conversation.LOUNGE_KEY, createdBy: null } });
+
+Conversation.ensureLounge = async () =>
+  (await Conversation.findLounge()) ||
+  Conversation.create({ kind: "group", title: "Chorus Lounge", clientKey: Conversation.LOUNGE_KEY, createdBy: null });
 
 module.exports = Conversation;

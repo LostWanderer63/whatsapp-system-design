@@ -7,18 +7,18 @@ function preview(c, draft) {
   if (c.typing) return { kind: "typing", text: c.kind === "group" ? `${firstName(PEOPLE[c.typing].name)} is typing…` : "typing…" };
   if (draft?.trim()) return { kind: "draft", text: draft };
   const last = c.messages[c.messages.length - 1];
-  if (!last) return { kind: "plain", text: "" };
+  if (!last) return { kind: "plain", text: c.live ? "Say hi to everyone 👋" : "" };
   const who = last.from === ME ? "You" : c.kind === "group" ? firstName(PEOPLE[last.from].name) : "";
   return { kind: "plain", who, text: last.text.replace(/\s+/g, " ") };
 }
 
-export default function ConversationList({ convos, activeId, drafts, user, onLogout, syncError, onRetrySync }) {
+export default function ConversationList({ convos, activeId, drafts, liveStatus, user, onLogout, syncError, onRetrySync }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
 
   const sorted = [...convos]
     .filter((c) => !q || c.title.toLowerCase().includes(q) || c.messages.some((m) => m.text.toLowerCase().includes(q)))
-    .sort((a, b) => (b.messages.at(-1)?.at ?? 0) - (a.messages.at(-1)?.at ?? 0));
+    .sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live)) || (b.messages.at(-1)?.at ?? 0) - (a.messages.at(-1)?.at ?? 0));
 
   return (
     <aside className="sidebar">
@@ -68,7 +68,10 @@ export default function ConversationList({ convos, activeId, drafts, user, onLog
               return (
                 <li key={c.id}>
                   <a className="convo" href={`#/chat/${c.id}`} aria-current={c.id === activeId ? "page" : undefined} data-unread={c.unread ? "" : undefined}>
-                    <Avatar name={c.title} tone={c.tone} size={48} />
+                    <span className="convo-avatar">
+                      <Avatar name={c.title} tone={c.tone} size={48} />
+                      {c.live && <span className={`live-dot is-${liveStatus}`} title={liveStatus === "online" ? "Live" : "Reconnecting"} />}
+                    </span>
                     <span className="convo-name">{c.title}</span>
                     {last && <time className="convo-time" dateTime={new Date(last.at).toISOString()}>{listStamp(last.at)}</time>}
                     <span className={`convo-preview is-${p.kind}`}>

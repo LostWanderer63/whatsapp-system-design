@@ -8,9 +8,11 @@ export const PEOPLE = {
   zoya: { name: "Zoya Khan", tone: "sky" },
 };
 
+const TONES = ["violet", "mint", "butter", "coral", "sky"];
+
 export function rememberPerson(userId, name) {
   const key = `u${userId}`;
-  PEOPLE[key] ??= { name: name || "Someone", tone: "sky" };
+  PEOPLE[key] ??= { name: name || "Someone", tone: TONES[userId % TONES.length] };
   return key;
 }
 
@@ -111,6 +113,7 @@ export function seedConversations(now) {
     }));
 
   return [
+    { id: "lounge", kind: "group", live: true, title: "Chorus Lounge", tone: "violet", members: [], messages: [], unread: 0, typing: null },
     { id: "trek", kind: "group", title: "Weekend trek", tone: "butter", members: ["riya", "kabir", "meera"], messages: build("trek"), unread: 3, typing: null },
     { id: "riya", kind: "direct", title: PEOPLE.riya.name, tone: PEOPLE.riya.tone, members: ["riya"], messages: build("riya"), unread: 1, typing: null },
     { id: "flat", kind: "group", title: "Flat 4B", tone: "coral", members: ["arjun", "zoya"], messages: build("flat"), unread: 0, typing: null },

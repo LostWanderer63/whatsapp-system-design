@@ -28,6 +28,9 @@ router.get("/", async (req, res, next) => {
 router.post("/", async (req, res, next) => {
   const { errors, values } = validateConversation(req.body || {});
   if (Object.keys(errors).length) return res.status(400).json({ message: "Chat could not be created.", errors });
+  if (values.clientKey === Conversation.LOUNGE_KEY) {
+    return res.status(400).json({ message: "Chat could not be created.", errors: { clientKey: "That key is reserved." } });
+  }
 
   const findExisting = () =>
     values.clientKey ? Conversation.findOne({ where: { createdBy: req.userId, clientKey: values.clientKey } }) : null;
@@ -46,6 +49,23 @@ router.post("/", async (req, res, next) => {
     if (err instanceof UniqueConstraintError) {
       const existing = await findExisting();
       if (existing) return res.json({ conversation: existing.toPublic() });
+    }
+    return next(err);
+  }
+});
+
+router.post("/lounge/join", async (req, res, next) => {
+  try {
+    const lounge = await Conversation.ensureLounge();
+    await ConversationMember.findOrCreate({
+      where: { conversationId: lounge.id, userId: req.userId },
+      defaults: { role: "member" },
+    });
+    return res.json({ conversation: lounge.toPublic() });
+  } catch (err) {
+    if (err instanceof UniqueConstraintError) {
+      const lounge = await Conversation.findLounge();
+      if (lounge) return res.json({ conversation: lounge.toPublic() });
     }
     return next(err);
   }

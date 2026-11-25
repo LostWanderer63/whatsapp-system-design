@@ -5,6 +5,7 @@ const User = require("../models/User");
 const Message = require("../models/Message");
 const ConversationMember = require("../models/ConversationMember");
 const { requireAuth } = require("../middleware/auth");
+const { publishMessage } = require("../realtime");
 const { validateMessage, parseId } = require("../validation");
 
 const router = express.Router();
@@ -45,7 +46,10 @@ router.post("/", requireAuth, async (req, res, next) => {
       return res.status(404).json({ message: "Chat not found." });
     }
     const message = await Message.create({ senderId: req.userId, ...values });
-    return res.status(201).json({ message: message.toPublic() });
+    const sender = await User.findByPk(req.userId, { attributes: ["name"] });
+    const payload = { ...message.toPublic(), senderName: sender?.name };
+    publishMessage(payload).catch((err) => console.error("Live delivery failed:", err.message));
+    return res.status(201).json({ message: payload });
   } catch (err) {
     if (err instanceof UniqueConstraintError && values.clientId) {
       const existing = await Message.findOne({ where: { senderId: req.userId, clientId: values.clientId } }).catch(() => null);

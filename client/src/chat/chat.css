@@ -210,8 +210,29 @@
   background: rgba(255, 255, 255, 0.13);
 }
 
-.convo .avatar {
+.convo-avatar {
+  position: relative;
   grid-row: span 2;
+  display: flex;
+}
+
+.live-dot {
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  width: 13px;
+  height: 13px;
+  border: 2.5px solid var(--night);
+  border-radius: 50%;
+  background: #8786a6;
+}
+
+.live-dot.is-online {
+  background: #3fbf7f;
+}
+
+.live-dot.is-connecting {
+  background: var(--butter);
 }
 
 .convo-name {

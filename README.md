@@ -30,13 +30,28 @@ npm start       # builds the React app and serves everything on http://localhost
 |---|---|---|
 | POST | `/api/auth/signup` | `{ name, email, phone, password }` |
 | POST | `/api/auth/login` | `{ identifier, password }` (identifier = email or phone) |
+| POST | `/api/conversations/lounge/join` | — joins the shared Chorus Lounge everyone can talk in |
 | GET | `/api/conversations` | — lists the chats you're a member of |
 | POST | `/api/conversations` | `{ title, kind?, clientKey? }` — creates a chat you own; an existing `clientKey` returns that chat |
 | GET | `/api/conversations/:id/messages?before=&limit=` | — members only; oldest-first page, `hasMore` for older pages |
 | GET | `/api/messages?after=` | — every message in your chats (`text`, `senderId`, `conversationId`, …), oldest first; `after=<id>` returns only newer ones; pages of 1000 with `hasMore` |
 | POST | `/api/messages` | `{ conversationId, text, clientId? }` — members only |
 
-All but signup/login need `Authorization: Bearer <token>`. Chats you aren't a member of return 404, so their existence isn't revealed.
+All but signup/login need `Authorization: Bearer <token>`.
+
+### Live messages (WebSocket)
+
+Connect to `ws://<host>/ws` (same port as the API; Vite proxies it in dev) and send `{"type":"auth","token":"<jwt>"}` as the first message within 5 seconds. The token goes in a message rather than the URL so it doesn't end up in logs. Bad or missing auth closes the socket with code `4001`.
+
+The server then pushes:
+
+| Event | When |
+|---|---|
+| `{"type":"ready"}` | authenticated |
+| `{"type":"message","message":{…}}` | a message was saved in a chat you're a member of (same shape as `GET /api/messages`) |
+| `{"type":"presence","online":n}` | someone connected or disconnected |
+
+Sending still goes through `POST /api/messages`, so validation, membership checks and retry-safety live in one place; the server broadcasts after the row is stored. On every (re)connect the client calls `GET /api/messages?after=<last id>` to fill in anything missed while offline, and reconnects with exponential backoff. Dead connections are dropped by a 30-second ping. Chats you aren't a member of return 404, so their existence isn't revealed.
 
 ### Tables
 

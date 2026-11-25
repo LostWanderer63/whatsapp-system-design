@@ -27,6 +27,7 @@ async function initDB() {
   await ConversationMember.sync();
   await require("./migrations").runMigrations();
   await sequelize.sync();
+  await Conversation.ensureLounge();
 }
 
 module.exports = { sequelize, initDB };

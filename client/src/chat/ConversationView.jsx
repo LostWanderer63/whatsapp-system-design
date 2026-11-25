@@ -4,14 +4,15 @@ import MessageList from "./MessageList.jsx";
 import { PEOPLE, firstName } from "./data.js";
 import { lastSeen } from "./time.js";
 
-function subtitle(convo) {
+function subtitle(convo, presence) {
+  if (convo.live) return presence;
   if (convo.typing) return convo.kind === "group" ? `${firstName(PEOPLE[convo.typing].name)} is typing…` : "typing…";
   if (convo.kind === "group") return ["You", ...convo.members.map((id) => firstName(PEOPLE[id].name))].join(", ");
   const theirs = convo.messages.findLast((m) => m.from === convo.members[0]);
   return theirs ? lastSeen(theirs.at) : "";
 }
 
-export default function ConversationView({ convo, dividerId, draft, onDraft, onSend, onRetry }) {
+export default function ConversationView({ convo, dividerId, draft, onDraft, onSend, onRetry, presence }) {
   return (
     <>
       <header className="pane-head">
@@ -23,7 +24,7 @@ export default function ConversationView({ convo, dividerId, draft, onDraft, onS
         <Avatar name={convo.title} tone={convo.tone} size={40} />
         <div className="pane-title">
           <h1>{convo.title}</h1>
-          <p className={convo.typing ? "is-typing" : undefined}>{subtitle(convo)}</p>
+          <p className={convo.typing ? "is-typing" : undefined}>{subtitle(convo, presence)}</p>
         </div>
       </header>
 

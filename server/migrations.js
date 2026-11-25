@@ -59,8 +59,16 @@ async function linkMessagesToConversations() {
   console.log("Migration done.");
 }
 
+async function allowSharedConversations() {
+  const [rows] = await sequelize.query(
+    "SELECT IS_NULLABLE AS nullable FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'conversations' AND COLUMN_NAME = 'created_by'"
+  );
+  if (rows[0]?.nullable === "NO") await sequelize.query("ALTER TABLE conversations MODIFY created_by INT NULL");
+}
+
 async function runMigrations() {
   await linkMessagesToConversations();
+  await allowSharedConversations();
 }
 
 module.exports = { runMigrations };
