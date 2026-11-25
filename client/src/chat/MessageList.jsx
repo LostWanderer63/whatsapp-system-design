@@ -26,8 +26,14 @@ function UploadProgress({ value }) {
   );
 }
 
-function Attachment({ attachment: a, sending, progress }) {
-  const progressBar = sending && <UploadProgress value={progress} />;
+function Attachment({ attachment: a, sending, progress, note }) {
+  const progressBar = sending && (
+    <>
+      <UploadProgress value={progress} />
+      {note && <span className="att-note">{note}</span>}
+    </>
+  );
+  const size = a.width && a.height ? { width: a.width, height: a.height } : {};
   if (!a.url) {
     return (
       <span className="att att-file is-missing">
@@ -42,7 +48,7 @@ function Attachment({ attachment: a, sending, progress }) {
   if (a.kind === "image") {
     return (
       <a className="att att-image" href={a.url} target="_blank" rel="noopener noreferrer" aria-label={`Open image ${a.name}`}>
-        <img src={a.url} alt={a.name} loading="lazy" />
+        <img src={a.thumbUrl || a.url} alt={a.name} loading="lazy" {...size} />
         {progressBar}
       </a>
     );
@@ -50,7 +56,7 @@ function Attachment({ attachment: a, sending, progress }) {
   if (a.kind === "video") {
     return (
       <span className="att att-video">
-        <video src={a.url} controls preload="metadata" />
+        <video src={a.url} controls preload={a.thumbUrl ? "none" : "metadata"} poster={a.thumbUrl || undefined} {...size} />
         {progressBar}
       </span>
     );
@@ -229,7 +235,7 @@ export default function MessageList({ convo, dividerId, onRetry }) {
                         {!mine && isGroup && first && <span className={`msg-from ink-${person.tone}`}>{firstName(person.name)}</span>}
                         {!mine && isGroup && !first && <span className="sr-only">{firstName(person.name)}: </span>}
                         {mine && <span className="sr-only">You: </span>}
-                        {m.attachment && <Attachment attachment={m.attachment} sending={m.status === "sending"} progress={m.progress} />}
+                        {m.attachment && <Attachment attachment={m.attachment} sending={m.status === "sending"} progress={m.progress} note={m.uploadNote} />}
                         {m.text && <span className="msg-text">{m.text}</span>}
                         <span className="msg-meta">
                           <time dateTime={new Date(m.at).toISOString()}>{clock(m.at)}</time>

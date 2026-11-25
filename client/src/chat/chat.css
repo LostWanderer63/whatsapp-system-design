@@ -1474,3 +1474,22 @@
 .msg.has-att.failed .att {
   opacity: 0.6;
 }
+
+.att-note {
+  position: absolute;
+  left: 8px;
+  bottom: 18px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(28, 27, 54, 0.75);
+  color: var(--white);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.att-file .att-note,
+.att-audio .att-note {
+  position: static;
+  margin-left: auto;
+  background: rgba(28, 27, 54, 0.6);
+}

@@ -14,7 +14,10 @@ const Message = sequelize.define(
     attachmentKey: { type: DataTypes.STRING(512), allowNull: true, field: "attachment_key" },
     attachmentName: { type: DataTypes.STRING(255), allowNull: true, field: "attachment_name" },
     attachmentType: { type: DataTypes.STRING(127), allowNull: true, field: "attachment_type" },
-    attachmentSize: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true, field: "attachment_size" },
+    attachmentSize: { type: DataTypes.BIGINT.UNSIGNED, allowNull: true, field: "attachment_size" },
+    attachmentThumbKey: { type: DataTypes.STRING(512), allowNull: true, field: "attachment_thumb_key" },
+    attachmentWidth: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true, field: "attachment_width" },
+    attachmentHeight: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true, field: "attachment_height" },
   },
   {
     tableName: "messages",
@@ -49,7 +52,16 @@ Message.prototype.toPublic = function toPublic() {
     text: this.body,
     clientId: this.clientId,
     attachment: this.attachmentKey
-      ? { key: this.attachmentKey, name: this.attachmentName, type: this.attachmentType, size: this.attachmentSize, kind: kindOf(this.attachmentType) }
+      ? {
+          key: this.attachmentKey,
+          thumbKey: this.attachmentThumbKey,
+          name: this.attachmentName,
+          type: this.attachmentType,
+          size: Number(this.attachmentSize),
+          width: this.attachmentWidth,
+          height: this.attachmentHeight,
+          kind: kindOf(this.attachmentType),
+        }
       : null,
     createdAt: this.createdAt,
   };

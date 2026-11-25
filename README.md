@@ -32,7 +32,11 @@ npm start       # builds the React app and serves everything on http://localhost
 | POST | `/api/auth/login` | `{ identifier, password }` (identifier = email or phone) |
 | POST | `/api/conversations/lounge/join` | — joins the shared Chorus Lounge everyone can talk in |
 | GET | `/api/media/config` | — `{ enabled, maxBytes, types }` |
-| POST | `/api/media` | multipart: `file`, `conversationId`, `caption?`, `clientId?` — members only; uploads to S3 and broadcasts the message |
+| POST | `/api/media/uploads` | `{ conversationId, name, type, size, purpose? }` — signed S3 upload URL(s) and an upload token |
+| POST | `/api/media/uploads/parts` | `{ token, partNumbers }` — fresh URLs for multipart parts |
+| POST | `/api/media/uploads/complete` | `{ token, parts?, caption?, clientId?, width?, height?, thumbnailToken? }` — verifies the object, saves and broadcasts the message |
+| POST | `/api/media/uploads/abort` | `{ token }` |
+| POST | `/api/media` | multipart: `file`, `conversationId`, `caption?`, `clientId?` — backup route; the server uploads to S3 |
 | GET | `/api/users/lookup?email=` | — `{ user: { id, name, email } }` if an account uses that email, else 404 |
 | GET | `/api/conversations` | — lists the chats you're a member of |
 | POST | `/api/conversations` | `{ title, kind?, clientKey? }` — creates a chat you own; an existing `clientKey` returns that chat |
@@ -108,11 +112,27 @@ server/socket-io/
 
 ### Media sharing (AWS S3)
 
-Photos, videos, audio, PDFs and office documents can be shared in any chat: use the paperclip in the message box, paste an image, or drop a file onto it. The browser uploads the file to `POST /api/media` (with a progress bar); the server checks the session, chat membership, file type and size, stores it in S3 with the AWS SDK, saves the message, and broadcasts `new_message` with the attachment to the chat's Socket.IO room.
+Photos, videos, audio, PDFs and office documents can be shared in any chat: use the paperclip in the message box, paste an image, or drop a file onto it. Files up to 100 MB (`MEDIA_MAX_MB`).
 
-The bucket stays **private**. Attachment URLs are pre-signed S3 GET URLs, generated whenever messages are sent to a client and valid for `MEDIA_URL_TTL_SECONDS` (12 hours by default), so only people in the chat get working links. Files are stored as `media/<conversation id>/<random uuid>.<ext>`; the original name is kept in the database and used for downloads. HTML, SVG and other active content types are refused. To serve files from a public bucket or CloudFront instead, set `S3_PUBLIC_BASE_URL` and URLs become `<base>/<key>`.
+**How a file travels** (the same pattern apps like Tinder use for photos: clients upload straight to object storage, the API only handles metadata):
 
-Without `S3_BUCKET` the server runs normally: `/api/media/config` reports `enabled: false`, uploads return 503, and the paperclip is hidden.
+1. The browser prepares the file. Photos larger than 2560 px or 4 MB are resized; every photo and video gets a 480 px JPEG thumbnail and its width and height are recorded.
+2. `POST /api/media/uploads` with `{ conversationId, name, type, size }`. The server checks membership, type and size, and returns pre-signed S3 URLs plus a signed upload token. The exact `Content-Length` and `Content-Type` are part of each signature, so S3 rejects anything else.
+   - Up to 8 MB: one signed `PUT`.
+   - Larger: an S3 multipart upload with one signed URL per 8 MB part.
+3. The browser uploads directly to S3: parts go 3 at a time, and each one is retried on its own.
+4. `POST /api/media/uploads/complete` with the token (plus part ETags, caption, `clientId`, dimensions, thumbnail token). The server finishes the multipart upload, confirms with `HeadObject` that the object has exactly the announced size and type (otherwise it is deleted), saves the message and broadcasts `new_message` to the chat's Socket.IO room.
+
+**Why it doesn't fail:**
+
+- Every step retries with exponential backoff and jitter (up to 8 attempts); while the browser is offline it waits for the connection and then carries on, keeping parts that already finished. The bubble shows the progress and notes like "Waiting for connection…".
+- Expired upload URLs are refreshed automatically (`POST /api/media/uploads/parts` re-signs parts).
+- If the browser can't reach storage directly but the API is fine (for example the bucket's CORS rules are missing), files up to 25 MB (`MEDIA_PROXY_MAX_MB`) switch to the backup route, `POST /api/media`, where the server uploads to S3 itself.
+- Completing is idempotent (by `clientId`, and by file), so retries never create duplicate messages.
+- Closing the tab during an upload asks for confirmation. Unfinished multipart uploads are cleaned up by the bucket lifecycle rule; failed ones are aborted right away.
+- Chat bubbles reserve the photo's real dimensions and show the small thumbnail first, so the chat doesn't jump and opens fast; tapping opens the full file.
+
+The bucket stays **private**. Download links are pre-signed S3 GET URLs, generated whenever messages are sent to a client and valid for `MEDIA_URL_TTL_SECONDS` (12 hours by default). HTML, SVG and other active content types are refused. Set `S3_PUBLIC_BASE_URL` to serve from a public bucket or CloudFront instead. Without `S3_BUCKET` the server runs normally, uploads return 503 and the paperclip is hidden.
 
 #### AWS setup
 
@@ -123,11 +143,13 @@ Requires the AWS CLI, signed in as an account that can create buckets and IAM us
    aws s3api create-bucket --bucket YOUR_BUCKET_NAME --region ap-south-1 \
      --create-bucket-configuration LocationConstraint=ap-south-1
    ```
-2. Allow the frontend's origins ([aws/s3-cors.json](aws/s3-cors.json); add your production URL there):
+2. Allow browser uploads from the frontend's origins ([aws/s3-cors.json](aws/s3-cors.json); add your production URL there; `ETag` must stay exposed for multipart uploads), and clean up unfinished multipart uploads after a day ([aws/s3-lifecycle.json](aws/s3-lifecycle.json)):
    ```bash
    aws s3api put-bucket-cors --bucket YOUR_BUCKET_NAME --cors-configuration file://aws/s3-cors.json
+   aws s3api put-bucket-lifecycle-configuration --bucket YOUR_BUCKET_NAME \
+     --lifecycle-configuration file://aws/s3-lifecycle.json
    ```
-3. Create an IAM user for the app with access to `media/*` only. Put your bucket name into [aws/iam-policy.json](aws/iam-policy.json) first. `s3:GetObject` is needed so the server can sign download links.
+3. Create an IAM user for the app with access to `media/*` and `thumbs/*` only. Put your bucket name into [aws/iam-policy.json](aws/iam-policy.json) first. `s3:GetObject` lets the server sign download links and verify uploads; `s3:DeleteObject` and `s3:AbortMultipartUpload` let it clean up bad or abandoned uploads.
    ```bash
    aws iam create-user --user-name chorus-media
    aws iam put-user-policy --user-name chorus-media --policy-name chorus-media-s3 \
@@ -142,7 +164,7 @@ Requires the AWS CLI, signed in as an account that can create buckets and IAM us
    AWS_SECRET_ACCESS_KEY=...
    ```
 
-`MEDIA_MAX_MB` (default 25) caps file size. `S3_ENDPOINT` and `S3_FORCE_PATH_STYLE=true` point the SDK at an S3-compatible server such as MinIO or LocalStack for local development.
+`MEDIA_MAX_MB` (default 100) caps file size; `MEDIA_PROXY_MAX_MB` (default 25) caps the backup route. `S3_ENDPOINT` and `S3_FORCE_PATH_STYLE=true` point the SDK at an S3-compatible server such as MinIO or LocalStack for local development.
 
 ### Tables
 
@@ -150,7 +172,7 @@ Requires the AWS CLI, signed in as an account that can create buckets and IAM us
 
 **`conversation_members`**: PK (`conversation_id` → `conversations.id`, `user_id` → `users.id`) · `role` (`owner`/`member`) · `joined_at`. Index on `user_id`. Every message read and write is checked against this table.
 
-**`messages`** (attachments add `attachment_key`, `attachment_name`, `attachment_type`, `attachment_size`)
+**`messages`** (attachments add `attachment_key`, `attachment_thumb_key`, `attachment_name`, `attachment_type`, `attachment_size`, `attachment_width`, `attachment_height`)
 
 | Column | Type | Notes |
 |---|---|---|

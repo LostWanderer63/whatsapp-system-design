@@ -3,8 +3,10 @@ import ConversationList from "./ConversationList.jsx";
 import ConversationView from "./ConversationView.jsx";
 import GroupDialog from "./GroupDialog.jsx";
 import { INCOMING, ME, PEOPLE, REPLIES, firstName, nextId, rememberPerson, seedConversations, toneFor } from "./data.js";
-import { getToken, request, uploadFile } from "../api.js";
+import { getToken, request } from "../api.js";
 import { kindFromType } from "./media.js";
+import { prepareMedia } from "./imagePrep.js";
+import { sendAttachment } from "./uploader.js";
 import { createChatSocket } from "./socket.js";
 import { EVENTS } from "./events.js";
 import { normalizeEmail, roomIdFor } from "./roomId.js";
@@ -380,16 +382,29 @@ export default function ChatApp({ user, activeId, onLogout }) {
 
   async function upload(convoId, msg) {
     let shown = 0;
+    const note = (text) => patchMessage(convoId, msg.id, (m) => (m.uploadNote === text ? m : { ...m, uploadNote: text }));
     try {
       const conversationId = await ensureConversation(convosRef.current.find((c) => c.id === convoId));
-      const form = new FormData();
-      form.append("conversationId", conversationId);
-      form.append("clientId", msg.id);
-      form.append("caption", msg.text);
-      form.append("file", msg.file);
-      const { message } = await uploadFile("/media", form, {
+      if (!msg.prepared) {
+        note("Preparing…");
+        msg.prepared = await prepareMedia(msg.file);
+        const { width, height } = msg.prepared;
+        patchMessage(convoId, msg.id, (m) => ({ ...m, attachment: { ...m.attachment, width, height } }));
+      }
+      note(null);
+      const { file, thumbnail, width, height } = msg.prepared;
+      const message = await sendAttachment({
+        conversationId,
+        clientId: msg.id,
+        caption: msg.text,
+        file,
+        thumbnail,
+        width,
+        height,
+        proxyMaxBytes: media?.proxyMaxBytes ?? 0,
+        onWait: note,
         onProgress: (p) => {
-          if (p - shown < 0.02 && p < 1) return;
+          if (Math.abs(p - shown) < 0.02 && p < 1) return;
           shown = p;
           patchMessage(convoId, msg.id, (m) => ({ ...m, progress: p }));
         },
@@ -397,10 +412,10 @@ export default function ChatApp({ user, activeId, onLogout }) {
       lastId.current = Math.max(lastId.current, Number(message.id));
       patchMessage(convoId, msg.id, (m) => {
         if (m.attachment?.local) URL.revokeObjectURL(m.attachment.url);
-        return { ...m, status: "sent", serverId: message.id, attachment: message.attachment, progress: undefined, file: undefined };
+        return { ...m, status: "sent", serverId: message.id, attachment: message.attachment, progress: undefined, uploadNote: undefined, file: undefined, prepared: undefined };
       });
     } catch (err) {
-      patchMessage(convoId, msg.id, (m) => ({ ...m, status: "failed", error: err.message || "Upload failed." }));
+      patchMessage(convoId, msg.id, (m) => ({ ...m, status: "failed", uploadNote: undefined, error: err.message || "Upload failed." }));
     }
   }
 
@@ -443,6 +458,17 @@ export default function ChatApp({ user, activeId, onLogout }) {
       receive(convoId, who, reply);
     }, 1300 + typingFor);
   }
+
+  const uploading = convos.some((c) => c.messages.some((m) => m.file && m.status === "sending"));
+  useEffect(() => {
+    if (!uploading) return undefined;
+    const warn = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [uploading]);
 
   const totalUnread = convos.reduce((n, c) => n + c.unread, 0);
   useEffect(() => {
