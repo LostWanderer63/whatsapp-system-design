@@ -166,11 +166,25 @@ Requires the AWS CLI, signed in as an account that can create buckets and IAM us
 
 `MEDIA_MAX_MB` (default 100) caps file size; `MEDIA_PROXY_MAX_MB` (default 25) caps the backup route. `S3_ENDPOINT` and `S3_FORCE_PATH_STYLE=true` point the SDK at an S3-compatible server such as MinIO or LocalStack for local development.
 
+### Nightly archiving
+
+Messages older than a day move from `messages` to `archived_messages` every night, so the table the app writes to and reads most stays small (1,000 users × 100 messages a day would otherwise add about 3 million rows a month).
+
+- A `node-cron` job inside the server runs at 03:00 by default (`ARCHIVE_CRON`, standard cron syntax; `ARCHIVE_TIMEZONE`, e.g. `Asia/Kolkata`; `ARCHIVE_ENABLED=false` turns it off).
+- It moves messages whose `created_at` is older than `ARCHIVE_AFTER_HOURS` (24) in batches of `ARCHIVE_BATCH_SIZE` (5,000). Each batch is one transaction: copy the rows into `archived_messages` (`INSERT IGNORE`, same ids), then delete them from `messages`. A crash between batches leaves every message in exactly one table, and the next run carries on.
+- `messages_created_at` makes finding old rows an index range scan instead of a full table scan.
+- A MySQL advisory lock (`GET_LOCK`) means only one run happens at a time, even with several servers or a manual run alongside the nightly one.
+- `npm run archive` runs it by hand (`npm run archive -- --older-than-hours=48` to override the age).
+
+Archived messages are still part of every chat. History reads (`GET /api/messages`, `GET /api/conversations/:id/messages`, the history sent with `join_room`) query both tables and merge by id, so users see the same conversation before and after a run. New messages, reconnect catch-up and send retries only ever touch recent ids, which live in the small table.
+
 ### Tables
 
 **`conversations`**: `id` BIGINT PK · `kind` (`direct`/`group`) · `title` · `created_by` → `users.id` (NULL for the shared lounge) · `client_key` (unique per creator; the app's demo chats use `trek`, `flat`, …) · `direct_key` (unique; one personal chat per pair of users) · `invite_code` (unique; set for group chats) · `created_at`
 
 **`conversation_members`**: PK (`conversation_id` → `conversations.id`, `user_id` → `users.id`) · `role` (`owner`/`member`) · `joined_at`. Index on `user_id`. Every message read and write is checked against this table.
+
+**`archived_messages`**: same columns, ids and foreign keys as `messages`, plus `archived_at`.
 
 **`messages`** (attachments add `attachment_key`, `attachment_thumb_key`, `attachment_name`, `attachment_type`, `attachment_size`, `attachment_width`, `attachment_height`)
 

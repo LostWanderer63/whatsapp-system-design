@@ -8,6 +8,7 @@ const { requireAuth } = require("../middleware/auth");
 const { publishMessage } = require("../socket-io");
 const { validateMessage, parseId } = require("../validation");
 const { serializeMessages, withMediaUrls } = require("../services/media");
+const { findMessages } = require("../services/messageStore");
 
 const router = express.Router();
 
@@ -18,15 +19,14 @@ router.get("/", requireAuth, async (req, res, next) => {
   if (req.query.after !== undefined && !after) return res.status(400).json({ message: "after must be a message id." });
 
   try {
-    const rows = await Message.findAll({
+    const rows = await findMessages({
       where: {
         conversationId: {
           [Op.in]: sequelize.literal(`(SELECT conversation_id FROM conversation_members WHERE user_id = ${sequelize.escape(req.userId)})`),
         },
         ...(after ? { id: { [Op.gt]: after } } : {}),
       },
-      include: [{ model: User, as: "sender", attributes: ["id", "name"] }],
-      order: [["id", "ASC"]],
+      direction: "ASC",
       limit: PAGE_SIZE + 1,
     });
     const hasMore = rows.length > PAGE_SIZE;

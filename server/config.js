@@ -37,6 +37,13 @@ module.exports = {
     proxyMaxBytes: (Number(process.env.MEDIA_PROXY_MAX_MB) || 25) * 1024 * 1024,
     urlTtlSeconds: Number(process.env.MEDIA_URL_TTL_SECONDS) || 12 * 60 * 60,
   },
+  archive: {
+    enabled: process.env.ARCHIVE_ENABLED !== "false",
+    schedule: process.env.ARCHIVE_CRON || "0 3 * * *",
+    timezone: process.env.ARCHIVE_TIMEZONE || undefined,
+    olderThanHours: Number(process.env.ARCHIVE_AFTER_HOURS) || 24,
+    batchSize: Number(process.env.ARCHIVE_BATCH_SIZE) || 5000,
+  },
   bcryptRounds: Number(process.env.BCRYPT_SALT_ROUNDS) || 10,
   defaultCountryCode: (process.env.DEFAULT_COUNTRY_CODE || "91").replace(/\D/g, ""),
 };

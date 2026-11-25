@@ -4,9 +4,9 @@ const { sequelize } = require("../db");
 const User = require("../models/User");
 const Conversation = require("../models/Conversation");
 const ConversationMember = require("../models/ConversationMember");
-const Message = require("../models/Message");
 const { roomIdFor } = require("../socket-io/roomId");
 const { serializeMessages } = require("./media");
+const { findMessages } = require("./messageStore");
 
 const HISTORY_SIZE = 50;
 const INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -53,12 +53,7 @@ async function describeConversation(conversation, meId) {
 }
 
 async function recentMessages(conversationId) {
-  const rows = await Message.findAll({
-    where: { conversationId },
-    include: [{ model: User, as: "sender", attributes: ["id", "name"] }],
-    order: [["id", "DESC"]],
-    limit: HISTORY_SIZE,
-  });
+  const rows = await findMessages({ where: { conversationId }, direction: "DESC", limit: HISTORY_SIZE });
   return serializeMessages(rows.reverse());
 }
 

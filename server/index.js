@@ -11,6 +11,7 @@ const fs = require("fs");
 const express = require("express");
 const { initDB } = require("./db");
 const { startSocketServer, closeSocketServer } = require("./socket-io");
+const { startJobs, stopJobs } = require("./jobs/scheduler");
 const authRoutes = require("./routes/auth");
 const messageRoutes = require("./routes/messages");
 const conversationRoutes = require("./routes/conversations");
@@ -42,11 +43,13 @@ app.use((err, req, res, next) => {
 });
 
 let shuttingDown = false;
+let jobs = [];
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`${signal} received, closing connections…`);
   setTimeout(() => process.exit(0), 3000).unref();
+  stopJobs(jobs);
   closeSocketServer().finally(() => process.exit(0));
 }
 process.on("SIGINT", () => shutdown("SIGINT"));
@@ -56,6 +59,7 @@ initDB()
   .then(() => {
     app.listen(config.port, () => console.log(`API running on http://localhost:${config.port}`));
     startSocketServer();
+    jobs = startJobs();
   })
   .catch((err) => {
     console.error("Could not connect to MySQL:", err.message);

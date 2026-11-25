@@ -7,7 +7,8 @@
     "dev": "concurrently -k -n api,web -c magenta,cyan \"node --watch server/index.js\" \"vite --config client/vite.config.mjs\"",
     "build": "vite build --config client/vite.config.mjs",
     "prestart": "npm run build",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "archive": "node server/jobs/runArchive.js"
   },
   "license": "ISC",
   "dependencies": {
@@ -19,6 +20,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.5.0",
     "mysql2": "^3.24.6",
+    "node-cron": "^4.6.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "sequelize": "^6.37.8",

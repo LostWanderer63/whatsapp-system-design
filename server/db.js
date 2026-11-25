@@ -21,6 +21,7 @@ async function initDB() {
   const Conversation = require("./models/Conversation");
   const ConversationMember = require("./models/ConversationMember");
   require("./models/Message");
+  require("./models/ArchivedMessage");
 
   await User.sync();
   await Conversation.sync();

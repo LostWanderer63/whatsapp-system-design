@@ -1,14 +1,13 @@
 const express = require("express");
 const { Op, UniqueConstraintError } = require("sequelize");
 const { sequelize } = require("../db");
-const User = require("../models/User");
 const Conversation = require("../models/Conversation");
 const ConversationMember = require("../models/ConversationMember");
-const Message = require("../models/Message");
 const { requireAuth } = require("../middleware/auth");
 const { validateConversation, parseId } = require("../validation");
 const { describeConversations } = require("../services/conversations");
 const { serializeMessages } = require("../services/media");
+const { findMessages } = require("../services/messageStore");
 const { addUserToConversation } = require("../socket-io");
 
 const router = express.Router();
@@ -86,10 +85,9 @@ router.get("/:id/messages", async (req, res, next) => {
   try {
     if (!(await ConversationMember.isMember(conversationId, req.userId))) return res.status(404).json(NOT_FOUND);
 
-    const rows = await Message.findAll({
+    const rows = await findMessages({
       where: { conversationId, ...(before ? { id: { [Op.lt]: before } } : {}) },
-      include: [{ model: User, as: "sender", attributes: ["id", "name"] }],
-      order: [["id", "DESC"]],
+      direction: "DESC",
       limit: limit + 1,
     });
     const hasMore = rows.length > limit;
